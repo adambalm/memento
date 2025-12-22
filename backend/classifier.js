@@ -48,11 +48,28 @@ Group related tabs together. Be concise.`;
 }
 
 /**
+ * Strip ANSI escape codes from text to prevent terminal formatting issues
+ */
+function stripAnsiCodes(text) {
+  if (!text) return text;
+  // Remove ANSI escape sequences (CSI sequences and other control sequences)
+  // Matches: \x1b[...m, \u001b[...m, ESC[...m, and other control sequences
+  return text
+    .replace(/\u001b\[[0-9;]*[a-zA-Z]/g, '')  // CSI sequences
+    .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')    // CSI sequences (hex)
+    .replace(/\u001b\[[0-9;]*m/g, '')         // SGR (Select Graphic Rendition) sequences
+    .replace(/\x1b\[[0-9;]*m/g, '');          // SGR sequences (hex)
+}
+
+/**
  * Parse LLM response into structured format
  */
 function parseLLMResponse(responseText, tabs, engineInfo) {
+  // Strip ANSI codes first to prevent terminal formatting issues
+  let cleanedText = stripAnsiCodes(responseText);
+  
   // Try to extract JSON from response
-  let jsonStr = responseText.trim();
+  let jsonStr = cleanedText.trim();
 
   // Handle markdown code blocks
   const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
