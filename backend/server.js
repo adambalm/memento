@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { classifyTabs } = require('./classifier');
@@ -13,16 +14,16 @@ app.use(express.json({ limit: '10mb' }));
 // POST /classifyBrowserContext - Main endpoint for tab classification
 app.post('/classifyBrowserContext', async (req, res) => {
   try {
-    const { tabs } = req.body;
+    const { tabs, engine } = req.body;
 
     if (!tabs || !Array.isArray(tabs)) {
       return res.status(400).json({ error: 'Invalid request: tabs array required' });
     }
 
-    console.log(`Received ${tabs.length} tabs for classification`);
+    console.log(`Received ${tabs.length} tabs for classification via ${engine || 'default'}`);
 
-    // Call mock LLM classifier
-    const classification = await classifyTabs(tabs);
+    // Call LLM classifier with specified engine
+    const classification = await classifyTabs(tabs, engine);
 
     // Save to memory
     await saveSession(classification);
@@ -47,13 +48,15 @@ app.get('/results', (req, res) => {
 // POST /classifyAndRender - Classify and return HTML directly
 app.post('/classifyAndRender', async (req, res) => {
   try {
-    const { tabs } = req.body;
+    const { tabs, engine } = req.body;
 
     if (!tabs || !Array.isArray(tabs)) {
       return res.status(400).send('<html><body><h1>Error: Invalid request</h1></body></html>');
     }
 
-    const classification = await classifyTabs(tabs);
+    console.log(`Received ${tabs.length} tabs for classification via ${engine || 'default'}`);
+
+    const classification = await classifyTabs(tabs, engine);
     await saveSession(classification);
     res.send(renderResultsPage(classification));
   } catch (error) {

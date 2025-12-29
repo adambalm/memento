@@ -1,3 +1,14 @@
 node_modules/
 memory/sessions/
 .claude/
+backend/evals/
+.env
+
+# Test artifacts (playwright, screenshots, temp HTML)
+test-*.html
+live-*.html
+new-*.html
+screenshot-*.js
+screenshots/
+screenshot-*.png
+nul

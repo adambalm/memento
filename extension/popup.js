@@ -2,6 +2,19 @@ const BACKEND_URL = 'http://localhost:3000';
 
 const captureBtn = document.getElementById('captureBtn');
 const statusDiv = document.getElementById('status');
+const engineSelect = document.getElementById('engineSelect');
+
+// Restore last selected engine from storage
+chrome.storage.local.get(['selectedEngine'], (result) => {
+  if (result.selectedEngine) {
+    engineSelect.value = result.selectedEngine;
+  }
+});
+
+// Save engine selection when changed
+engineSelect.addEventListener('change', () => {
+  chrome.storage.local.set({ selectedEngine: engineSelect.value });
+});
 
 function setStatus(message, isError = false) {
   if (isError) {
@@ -28,17 +41,21 @@ function withTimeout(promise, ms, fallback) {
   ]);
 }
 
-// Extract page content from a tab using scripting API (with 1s timeout per tab)
+// Content extraction limit (8k chars for deep dive capability)
+const CONTENT_LIMIT = 8000;
+
+// Extract page content from a tab using scripting API (with 2s timeout per tab)
 async function extractPageContent(tabId) {
   try {
     const extraction = chrome.scripting.executeScript({
       target: { tabId },
-      func: () => {
+      func: (limit) => {
         const bodyText = document.body?.innerText || '';
-        return bodyText.slice(0, 2000);
-      }
+        return bodyText.slice(0, limit);
+      },
+      args: [CONTENT_LIMIT]
     });
-    const results = await withTimeout(extraction, 1000, null);
+    const results = await withTimeout(extraction, 2000, null);
     return results?.[0]?.result || '';
   } catch (error) {
     console.log(`Could not extract content from tab ${tabId}:`, error.message);
@@ -49,14 +66,40 @@ async function extractPageContent(tabId) {
 // Gather all open tabs with their data
 async function gatherTabData() {
   const tabs = await chrome.tabs.query({});
+
+  // === DIAGNOSTIC LOGGING ===
+  console.log(`[Memento] chrome.tabs.query returned ${tabs.length} tabs`);
+  console.table(tabs.map(t => ({
+    id: t.id,
+    windowId: t.windowId,
+    groupId: t.groupId,
+    title: t.title?.slice(0, 40),
+    url: t.url?.slice(0, 60),
+    status: t.status
+  })));
+
   const tabData = [];
+  let skippedChrome = 0;
+  let skippedExtension = 0;
+  let skippedAbout = 0;
+  let skippedError = 0;
 
   for (const tab of tabs) {
     try {
       // Skip chrome:// and other restricted URLs
-      if (tab.url?.startsWith('chrome://') ||
-          tab.url?.startsWith('chrome-extension://') ||
-          tab.url?.startsWith('about:')) {
+      if (tab.url?.startsWith('chrome://')) {
+        skippedChrome++;
+        console.log(`[Memento] SKIP chrome:// - ${tab.title}`);
+        continue;
+      }
+      if (tab.url?.startsWith('chrome-extension://')) {
+        skippedExtension++;
+        console.log(`[Memento] SKIP chrome-extension:// - ${tab.title}`);
+        continue;
+      }
+      if (tab.url?.startsWith('about:')) {
+        skippedAbout++;
+        console.log(`[Memento] SKIP about: - ${tab.title}`);
         continue;
       }
 
@@ -65,37 +108,49 @@ async function gatherTabData() {
         content = await extractPageContent(tab.id);
       }
 
+      console.log(`[Memento] CAPTURED: ${tab.title?.slice(0, 50)} (groupId: ${tab.groupId}, windowId: ${tab.windowId})`);
+
       tabData.push({
         url: tab.url || '',
         title: tab.title || '',
         content: content
       });
     } catch (error) {
-      console.log(`Skipping tab ${tab.id}:`, error.message);
+      skippedError++;
+      console.log(`[Memento] ERROR skipping tab ${tab.id}: ${error.message}`);
     }
   }
+
+  console.log(`[Memento] === SUMMARY ===`);
+  console.log(`[Memento] Raw from query: ${tabs.length}`);
+  console.log(`[Memento] Skipped chrome://: ${skippedChrome}`);
+  console.log(`[Memento] Skipped extension://: ${skippedExtension}`);
+  console.log(`[Memento] Skipped about:: ${skippedAbout}`);
+  console.log(`[Memento] Skipped errors: ${skippedError}`);
+  console.log(`[Memento] Final captured: ${tabData.length}`);
+  // === END DIAGNOSTIC LOGGING ===
 
   return tabData;
 }
 
-// Send data to backend for classification
-async function classifySession(tabs) {
-  const response = await fetch(`${BACKEND_URL}/classifyBrowserContext`, {
+// Send data to backend for classification and get HTML back
+async function classifySession(tabs, engine) {
+  const response = await fetch(`${BACKEND_URL}/classifyAndRender`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ tabs })
+    body: JSON.stringify({ tabs, engine })
   });
 
   if (!response.ok) {
     throw new Error(`Backend error: ${response.status}`);
   }
 
-  return response.json();
+  return response.text();
 }
 
-// Main capture flow with 70-second global timeout (LLM needs time)
+// Main capture flow with 5-minute global timeout (exhaustive classification needs time)
 async function captureSession() {
   setLoading(true);
   setStatus('<span class="spinner"></span>Gathering tab data...');
@@ -103,11 +158,11 @@ async function captureSession() {
   const timeoutId = setTimeout(() => {
     setStatus('Capture timed out', true);
     setLoading(false);
-  }, 70000);
+  }, 300000);  // 5 minutes for testing
 
   try {
-    // Step 1: Gather tab data (5s budget)
-    const tabs = await withTimeout(gatherTabData(), 5000, []);
+    // Step 1: Gather tab data (30s budget)
+    const tabs = await withTimeout(gatherTabData(), 30000, []);
 
     if (tabs.length === 0) {
       clearTimeout(timeoutId);
@@ -116,22 +171,31 @@ async function captureSession() {
       return;
     }
 
-    setStatus(`<span class="spinner"></span>Classifying ${tabs.length} tabs via LLM...`);
+    const engine = engineSelect.value;
+    const engineLabel = engineSelect.options[engineSelect.selectedIndex].text;
+    setStatus(`<span class="spinner"></span>Classifying ${tabs.length} tabs via ${engineLabel}...`);
 
-    // Step 2: Send to backend (65s budget for LLM)
-    const result = await withTimeout(classifySession(tabs), 65000, null);
+    // Step 2: Send to backend and get HTML (4 min budget for exhaustive LLM classification)
+    const html = await withTimeout(classifySession(tabs, engine), 240000, null);
 
     clearTimeout(timeoutId);
 
-    if (!result) {
+    // Extract and log classifier source from HTML comment
+    const sourceMatch = html?.match(/<!-- MEMENTO_SOURCE:(\w+):?(.*?) -->/);
+    const classifierSource = sourceMatch ? sourceMatch[1] : 'unknown';
+    const classifierModel = sourceMatch && sourceMatch[2] ? sourceMatch[2] : null;
+    console.log(`[Memento] Classification source: ${classifierSource}${classifierModel ? ` (${classifierModel})` : ''}`);
+
+    if (!html) {
       setStatus('Classification timed out', true);
       setLoading(false);
       return;
     }
 
-    // Step 3: Open results page
-    const resultsUrl = `${BACKEND_URL}/results?data=${encodeURIComponent(JSON.stringify(result))}`;
-    await chrome.tabs.create({ url: resultsUrl });
+    // Step 3: Open results page via blob URL
+    const blob = new Blob([html], { type: 'text/html' });
+    const blobUrl = URL.createObjectURL(blob);
+    await chrome.tabs.create({ url: blobUrl });
 
     setStatus(`Captured ${tabs.length} tabs!`);
   } catch (error) {

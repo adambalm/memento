@@ -46,3 +46,22 @@ To switch LLM engines, modify `DEFAULT_ENGINE` in `classifier.js`. Stubs exist f
 
 ### Session Schema (v1.0.0)
 Output includes `meta` block with `schemaVersion`, `engine`, `model`, `endpoint` for provenance tracking.
+
+## Known Issues
+
+### Tab Capture Incomplete (2025-12-20)
+**Status:** Investigating
+
+**Symptom:** Extension reports capturing N tabs, but visible browser tabs are not all present in the session JSON. User had ~15+ tabs visible but only 10 were captured.
+
+**Possible causes (not yet confirmed):**
+1. **Chrome Tab Groups** — `chrome.tabs.query({})` may not enumerate collapsed/grouped tabs correctly
+2. **Chrome Profiles** — Extension only sees tabs from its own profile; tabs in other profiles are invisible
+3. **Window isolation** — Tabs in other windows may not be captured
+4. **Silent failures** — Content extraction errors may cause tabs to be skipped (check `catch` block in `gatherTabData`)
+
+**To investigate:**
+- Add logging to show raw tab count from `chrome.tabs.query({})` vs final `tabData.length`
+- Test with tab groups expanded vs collapsed
+- Test with single vs multiple windows
+- Verify extension is installed in correct profile

@@ -4,9 +4,10 @@
 
 const CONFIG = {
   endpoint: process.env.OLLAMA_ENDPOINT || 'http://adambalm:11434/api/generate',
-  model: process.env.OLLAMA_MODEL || 'qwen2.5-coder',
-  timeout: 60000,
-  maxRetries: 2
+  model: 'qwen3',  // Hardcoded for testing - TODO: restore env override after validation
+  timeout: 180000,  // 3 minutes for exhaustive classification
+  maxRetries: 2,
+  num_predict: 8000  // More tokens for full tab listing
 };
 
 function getConfig() {
@@ -29,7 +30,7 @@ async function run(prompt, attempt = 1) {
         model: CONFIG.model,
         prompt: prompt,
         stream: false,
-        options: { temperature: 0.3, num_predict: 2000 }
+        options: { temperature: 0.3, num_predict: CONFIG.num_predict }
       }),
       signal: controller.signal
     });

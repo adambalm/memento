@@ -53,6 +53,28 @@
       font-size: 13px;
       min-height: 40px;
     }
+    .model-selector {
+      margin-bottom: 15px;
+    }
+    .model-selector label {
+      color: rgba(255, 255, 255, 0.9);
+      font-size: 12px;
+      display: block;
+      margin-bottom: 6px;
+    }
+    #engineSelect {
+      width: 100%;
+      padding: 10px 12px;
+      font-size: 14px;
+      border: none;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.95);
+      color: #333;
+      cursor: pointer;
+    }
+    #engineSelect:focus {
+      outline: 2px solid rgba(255, 255, 255, 0.5);
+    }
     .error {
       background: rgba(255, 255, 255, 0.2);
       padding: 10px;
@@ -79,6 +101,13 @@
   <div class="container">
     <h1>Memento</h1>
     <p class="subtitle">Capture & classify your browsing session</p>
+    <div class="model-selector">
+      <label for="engineSelect">Model</label>
+      <select id="engineSelect">
+        <option value="ollama-local">Ollama (local)</option>
+        <option value="anthropic">Claude (Anthropic)</option>
+      </select>
+    </div>
     <button id="captureBtn">Capture Session</button>
     <div id="status"></div>
   </div>
