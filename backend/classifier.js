@@ -32,20 +32,27 @@ Categories: Development, Research, Shopping, Social Media, Entertainment, News, 
 OUTPUT FORMAT - respond with ONLY this JSON (no markdown, no explanation):
 {
   "assignments": {
-    "1": "Category",
-    "2": "Category",
-    "3": "Category"
+    "1": {"category": "Category", "signals": ["signal1", "signal2"], "confidence": "high|medium|low"},
+    "2": {"category": "Category", "signals": ["signal1"], "confidence": "medium"}
   },
   "narrative": "2-3 sentence summary of user's browsing focus",
-  "deepDive": [5, 12]
+  "sessionIntent": "1 sentence hypothesis about what user is trying to accomplish",
+  "deepDive": [5, 12],
+  "overallConfidence": "high|medium|low",
+  "uncertainties": ["any tabs or patterns you're uncertain about"]
 }
 
 CRITICAL RULES:
 1. The "assignments" object MUST have EXACTLY ${tabs.length} entries (keys "1" through "${tabs.length}")
-2. Every key must be a string number from "1" to "${tabs.length}"
-3. Every value must be one of the categories listed above
-4. "deepDive" is an array of tab numbers (integers) for research papers or technical docs needing deeper analysis. Use empty array [] if none.
-5. DO NOT skip any tabs. DO NOT summarize. List ALL ${tabs.length} assignments.
+2. Every value must be an object with "category", "signals", and "confidence" fields
+3. "signals" = evidence that led to this classification (URL patterns, title keywords, known sites)
+4. "confidence" = how certain: high (clear signals), medium (some ambiguity), low (guessing)
+5. "sessionIntent" = your hypothesis about what the user is trying to accomplish overall
+6. "uncertainties" = be explicit about what you're unsure of - this enables human correction
+7. "deepDive" = array of tab numbers for technical docs needing deeper analysis. Empty [] if none.
+8. DO NOT skip any tabs. List ALL ${tabs.length} assignments with reasoning.
+
+Your reasoning must be AUDITABLE. A human reviewing your output should understand exactly why each tab was classified the way it was.
 
 VERIFY before responding: Count your assignments. You must have exactly ${tabs.length} entries.`;
 }
@@ -90,27 +97,54 @@ function parseLLMResponse(responseText, tabs, engineInfo) {
 
   const parsed = JSON.parse(jsonStr);
 
-  // Handle new simplified format: {assignments: {"1": "Category", ...}}
-  const assignments = parsed.assignments || {};
+  // Handle auditable format: {assignments: {"1": {category, signals, confidence}, ...}}
+  const rawAssignments = parsed.assignments || {};
   const narrative = parsed.narrative || 'Session analyzed.';
+  const sessionIntent = parsed.sessionIntent || null;
+  const overallConfidence = parsed.overallConfidence || 'unknown';
+  const uncertainties = parsed.uncertainties || [];
   const deepDiveIndices = parsed.deepDive || [];
 
   // Log assignment count for debugging
-  const assignmentCount = Object.keys(assignments).length;
+  const assignmentCount = Object.keys(rawAssignments).length;
   console.log(`[Parser] Got ${assignmentCount}/${tabs.length} assignments from LLM`);
 
-  // Build groups from assignments
+  // Build groups and reasoning from assignments
   const groups = {};
-  for (const [indexStr, category] of Object.entries(assignments)) {
+  const reasoning = {};  // Store per-tab reasoning for auditability
+
+  for (const [indexStr, assignment] of Object.entries(rawAssignments)) {
     const tabIndex = parseInt(indexStr, 10);
     if (tabIndex >= 1 && tabIndex <= tabs.length) {
       const tab = tabs[tabIndex - 1];
+
+      // Handle both old format (string) and new format (object)
+      let category, signals, confidence;
+      if (typeof assignment === 'string') {
+        category = assignment;
+        signals = [];
+        confidence = 'unknown';
+      } else {
+        category = assignment.category || 'Other';
+        signals = assignment.signals || [];
+        confidence = assignment.confidence || 'unknown';
+      }
+
       if (!groups[category]) groups[category] = [];
       groups[category].push({
         tabIndex,
         title: tab.title || 'Untitled',
         url: tab.url || ''
       });
+
+      // Store reasoning for this tab
+      reasoning[tabIndex] = {
+        category,
+        signals,
+        confidence,
+        title: tab.title || 'Untitled',
+        url: tab.url || ''
+      };
     }
   }
 
@@ -165,9 +199,17 @@ function parseLLMResponse(responseText, tabs, engineInfo) {
     totalTabs: tabs.length,
     classifiedCount: assignmentCount,
     narrative,
+    sessionIntent,  // Hypothesis about user's goal
     groups,
     tasks,
     deepDive: normalizedDeepDive,
+    // AUDITABLE REASONING - human can review why each decision was made
+    reasoning: {
+      perTab: reasoning,  // Per-tab: category, signals, confidence
+      overallConfidence,
+      uncertainties,
+      sessionIntent
+    },
     summary: {
       categories: Object.keys(groups),
       tabsByCategory: Object.fromEntries(
