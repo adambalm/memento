@@ -3,17 +3,26 @@ const BACKEND_URL = 'http://localhost:3000';
 const captureBtn = document.getElementById('captureBtn');
 const statusDiv = document.getElementById('status');
 const engineSelect = document.getElementById('engineSelect');
+const debugModeCheckbox = document.getElementById('debugMode');
 
-// Restore last selected engine from storage
-chrome.storage.local.get(['selectedEngine'], (result) => {
+// Restore last selected engine and debug mode from storage
+chrome.storage.local.get(['selectedEngine', 'debugMode'], (result) => {
   if (result.selectedEngine) {
     engineSelect.value = result.selectedEngine;
+  }
+  if (result.debugMode) {
+    debugModeCheckbox.checked = result.debugMode;
   }
 });
 
 // Save engine selection when changed
 engineSelect.addEventListener('change', () => {
   chrome.storage.local.set({ selectedEngine: engineSelect.value });
+});
+
+// Save debug mode selection when changed
+debugModeCheckbox.addEventListener('change', () => {
+  chrome.storage.local.set({ debugMode: debugModeCheckbox.checked });
 });
 
 function setStatus(message, isError = false) {
@@ -108,12 +117,19 @@ async function gatherTabData() {
         content = await extractPageContent(tab.id);
       }
 
-      console.log(`[Memento] CAPTURED: ${tab.title?.slice(0, 50)} (groupId: ${tab.groupId}, windowId: ${tab.windowId})`);
+      // Detect if this is likely a PDF (can't extract content from Chrome's PDF viewer)
+      const isPdf = (tab.url || '').toLowerCase().endsWith('.pdf') ||
+                    (tab.url || '').includes('/pdf/') ||
+                    (tab.title || '').toLowerCase().includes('.pdf');
+      const needsVisualExtraction = isPdf && !content;
+
+      console.log(`[Memento] CAPTURED: ${tab.title?.slice(0, 50)} (groupId: ${tab.groupId}, windowId: ${tab.windowId})${needsVisualExtraction ? ' [PDF - needs visual extraction]' : ''}`);
 
       tabData.push({
         url: tab.url || '',
         title: tab.title || '',
-        content: content
+        content: content,
+        needsVisualExtraction: needsVisualExtraction  // Flag for backend to use Playwright + vision
       });
     } catch (error) {
       skippedError++;
@@ -134,13 +150,13 @@ async function gatherTabData() {
 }
 
 // Send data to backend for classification and get HTML back
-async function classifySession(tabs, engine) {
+async function classifySession(tabs, engine, debugMode) {
   const response = await fetch(`${BACKEND_URL}/classifyAndRender`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ tabs, engine })
+    body: JSON.stringify({ tabs, engine, debugMode })
   });
 
   if (!response.ok) {
@@ -173,10 +189,12 @@ async function captureSession() {
 
     const engine = engineSelect.value;
     const engineLabel = engineSelect.options[engineSelect.selectedIndex].text;
-    setStatus(`<span class="spinner"></span>Classifying ${tabs.length} tabs via ${engineLabel}...`);
+    const debugMode = debugModeCheckbox.checked;
+    const debugLabel = debugMode ? ' (debug)' : '';
+    setStatus(`<span class="spinner"></span>Classifying ${tabs.length} tabs via ${engineLabel}${debugLabel}...`);
 
     // Step 2: Send to backend and get HTML (4 min budget for exhaustive LLM classification)
-    const html = await withTimeout(classifySession(tabs, engine), 240000, null);
+    const html = await withTimeout(classifySession(tabs, engine, debugMode), 240000, null);
 
     clearTimeout(timeoutId);
 

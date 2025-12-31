@@ -75,6 +75,23 @@
     #engineSelect:focus {
       outline: 2px solid rgba(255, 255, 255, 0.5);
     }
+    .debug-toggle {
+      margin-bottom: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .debug-toggle input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+    .debug-toggle label {
+      color: rgba(255, 255, 255, 0.9);
+      font-size: 13px;
+      cursor: pointer;
+    }
     .error {
       background: rgba(255, 255, 255, 0.2);
       padding: 10px;
@@ -107,6 +124,10 @@
         <option value="ollama-local">Ollama (local)</option>
         <option value="anthropic">Claude (Anthropic)</option>
       </select>
+    </div>
+    <div class="debug-toggle">
+      <input type="checkbox" id="debugMode" />
+      <label for="debugMode">Debug mode (show prompts & reasoning)</label>
     </div>
     <button id="captureBtn">Capture Session</button>
     <div id="status"></div>

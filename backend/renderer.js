@@ -1,6 +1,7 @@
 /**
  * Renders classification results as an HTML page
  * Design: Tufte-inspired readability + reasoning flow transparency
+ * v1.1: Cognitive debugging trace panels for inspecting prompts and responses
  */
 
 function escapeHtml(text) {
@@ -13,14 +14,112 @@ function escapeHtml(text) {
     .replace(/'/g, '&#39;');
 }
 
+/**
+ * Render a trace panel for cognitive debugging
+ * Shows prompt, raw response, and parsing metadata
+ */
+function renderTracePanel(trace, passName, tokens = null) {
+  if (!trace || !trace.prompt) return '';
+
+  const tokensInfo = tokens ? ` • ${tokens.toLocaleString()} tokens` : '';
+
+  return `
+    <details class="trace-panel">
+      <summary>${passName}${tokensInfo}</summary>
+      <div class="trace-grid">
+        <div class="trace-prompt">
+          <h4>Prompt Sent to LLM</h4>
+          <pre class="trace-code">${escapeHtml(trace.prompt)}</pre>
+        </div>
+        <div class="trace-response">
+          <h4>Raw LLM Response</h4>
+          <pre class="trace-code">${escapeHtml(trace.rawResponse || '(no response captured)')}</pre>
+        </div>
+      </div>
+      ${trace.parsing ? `
+        <div class="trace-parsing">
+          <h4>Parsing Process</h4>
+          <ul>
+            <li>ANSI codes stripped: ${trace.parsing.ansiStripped || 0}</li>
+            <li>Markdown fences removed: ${trace.parsing.fencesRemoved || 0}</li>
+            ${trace.parsing.jsonByteRange ? `<li>JSON extracted from bytes ${trace.parsing.jsonByteRange[0]}-${trace.parsing.jsonByteRange[1]}</li>` : ''}
+            <li>Status: <span class="parse-status-${trace.parsing.status || 'unknown'}">${trace.parsing.status || 'unknown'}</span></li>
+            ${trace.parsing.missingTabs && trace.parsing.missingTabs.length > 0 ? `<li class="parse-warning">Missing tabs: ${trace.parsing.missingTabs.join(', ')}</li>` : ''}
+          </ul>
+        </div>
+      ` : ''}
+      ${trace.contextUsed ? `
+        <div class="trace-context">
+          <h4>Context Injected</h4>
+          <ul>
+            <li>Projects: ${trace.contextUsed.projects?.join(', ') || 'none'}</li>
+            <li>Keywords: ${trace.contextUsed.keywords?.join(', ') || 'none'}</li>
+          </ul>
+        </div>
+      ` : ''}
+    </details>
+  `;
+}
+
+/**
+ * Render per-tab attribution for debugging classification decisions
+ *
+ * Attribution shows WHY this tab was classified as it was:
+ * - context.json matches: keywords from your active projects found in tab content
+ * - domain matches: URL patterns that suggest a category (github.com → Development)
+ */
+function renderTabAttribution(tabIndex, attribution) {
+  if (!attribution || !attribution.attributionChain || attribution.attributionChain.length === 0) {
+    return `<div class="no-attribution">No keyword matches found in tab content</div>`;
+  }
+
+  const contextMatches = attribution.attributionChain.filter(c => c.source === 'context.json');
+  const domainMatches = attribution.attributionChain.filter(c => c.source === 'domain');
+
+  let html = '<div class="attribution-detail">';
+
+  if (contextMatches.length > 0) {
+    html += '<div class="attr-group"><strong>Context keywords found:</strong><ul>';
+    html += contextMatches.map(c =>
+      `<li class="attr-context">${escapeHtml(c.match)}${c.project ? ` (project: ${escapeHtml(c.project)})` : ''}</li>`
+    ).join('');
+    html += '</ul></div>';
+  }
+
+  if (domainMatches.length > 0) {
+    html += '<div class="attr-group"><strong>Domain signals:</strong><ul>';
+    html += domainMatches.map(c =>
+      `<li class="attr-domain">${escapeHtml(c.match)} → ${escapeHtml(c.signal || 'detected')}</li>`
+    ).join('');
+    html += '</ul></div>';
+  }
+
+  if (attribution.noContextMatch) {
+    html += '<div class="attr-warning">No active project keywords matched this tab</div>';
+  }
+
+  html += '</div>';
+
+  return `
+    <details class="tab-attribution">
+      <summary>Why this classification?</summary>
+      ${html}
+    </details>
+  `;
+}
+
 function renderResultsPage(data) {
-  const { narrative, groups, tasks, summary, timestamp, totalTabs, source, meta, deepDiveResults, deepDive } = data;
+  const { narrative, groups, tasks, summary, timestamp, totalTabs, source, meta, deepDiveResults, deepDive, trace } = data;
 
   const safeSource = source || 'unknown';
   const modelName = meta?.model || null;
   const timing = meta?.timing || {};
   const usage = meta?.usage || null;
   const cost = meta?.cost || null;
+
+  // Debug mode detection
+  const hasTrace = trace && (trace.pass1?.prompt || trace.pass2?.length > 0 || trace.pass3?.prompt);
+  const perTabAttribution = trace?.perTabAttribution || {};
 
   // Flow trace - showing the reasoning chain
   const triageDecisions = deepDive || [];
@@ -108,15 +207,19 @@ function renderResultsPage(data) {
         const signals = r.signals || [];
         const confidence = r.confidence || 'unknown';
         const hasReasoning = signals.length > 0 || confidence !== 'unknown';
+        const attribution = perTabAttribution[tab.tabIndex];
         return `
         <li class="tab-item">
-          <a href="${escapeHtml(tab.url)}" target="_blank">${escapeHtml(tab.title)}</a>
-          ${hasReasoning ? `
-            <span class="margin-note">
-              <span class="confidence confidence-${confidence}">${confidence}</span>
-              ${signals.length > 0 ? `<span class="signals">${signals.map(s => escapeHtml(s)).join(', ')}</span>` : ''}
-            </span>
-          ` : ''}
+          <div class="tab-main">
+            <a href="${escapeHtml(tab.url)}" target="_blank">${escapeHtml(tab.title)}</a>
+            ${hasReasoning ? `
+              <span class="margin-note">
+                <span class="confidence confidence-${confidence}">${confidence}</span>
+                ${signals.length > 0 ? `<span class="signals">${signals.map(s => escapeHtml(s)).join(', ')}</span>` : ''}
+              </span>
+            ` : ''}
+          </div>
+          ${hasTrace && attribution ? renderTabAttribution(tab.tabIndex, attribution) : ''}
         </li>`;
       }).join('')}
     </ul>
@@ -445,6 +548,133 @@ function renderResultsPage(data) {
     }
     .json-content.visible { display: block; }
     pre { white-space: pre-wrap; word-wrap: break-word; }
+
+    /* Trace panels for cognitive debugging */
+    .trace-section {
+      background: #f5f5f0;
+      border: 2px solid #e0ddd5;
+      padding: 1.5em;
+      margin: 2em 0;
+      border-radius: 4px;
+    }
+    .trace-section h2 {
+      margin-top: 0;
+      color: #555;
+    }
+    .trace-intro {
+      font-size: 0.9em;
+      color: var(--text-muted);
+      margin-bottom: 1em;
+    }
+    .trace-panel {
+      margin: 1em 0;
+      border-left: 3px solid #6b6b6b;
+      background: var(--bg-primary);
+    }
+    .trace-panel summary {
+      cursor: pointer;
+      padding: 0.75em 1em;
+      font-weight: 600;
+      color: var(--text-secondary);
+      background: var(--bg-secondary);
+    }
+    .trace-panel summary:hover {
+      background: #e8e8e0;
+    }
+    .trace-panel[open] summary {
+      border-bottom: 1px solid var(--border-light);
+    }
+    .trace-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1em;
+      padding: 1em;
+    }
+    @media (min-width: 1000px) {
+      .trace-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+    .trace-prompt, .trace-response {
+      background: var(--bg-secondary);
+      padding: 0.75em;
+      border-radius: 4px;
+    }
+    .trace-prompt h4, .trace-response h4, .trace-parsing h4, .trace-context h4 {
+      margin: 0 0 0.5em 0;
+      font-size: 0.9em;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+    .trace-code {
+      max-height: 400px;
+      overflow: auto;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 0.8em;
+      background: #fafaf5;
+      padding: 0.75em;
+      border: 1px solid var(--border-light);
+      border-radius: 3px;
+      margin: 0;
+    }
+    .trace-parsing, .trace-context {
+      padding: 0.75em 1em;
+      border-top: 1px solid var(--border-light);
+    }
+    .trace-parsing ul, .trace-context ul {
+      margin: 0;
+      padding-left: 1.5em;
+      font-size: 0.9em;
+    }
+    .trace-parsing li, .trace-context li {
+      margin: 0.25em 0;
+    }
+    .parse-status-success { color: #155724; font-weight: 600; }
+    .parse-status-unknown { color: var(--text-muted); }
+    .parse-warning { color: #856404; font-weight: 600; }
+
+    /* Tab item with attribution */
+    .tab-main {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 1em;
+    }
+    .tab-main > a { flex: 1; min-width: 0; }
+    .tab-attribution {
+      margin-top: 0.25em;
+      margin-left: 1em;
+      font-size: 0.85em;
+    }
+    .tab-attribution summary {
+      cursor: pointer;
+      color: var(--text-muted);
+    }
+    .tab-attribution[open] summary {
+      margin-bottom: 0.25em;
+    }
+    .attribution-chain {
+      margin: 0;
+      padding-left: 1.5em;
+      font-size: 0.9em;
+    }
+    .attribution-chain li {
+      margin: 0.15em 0;
+    }
+    .attr-source {
+      font-family: Consolas, monospace;
+      font-size: 0.9em;
+      background: var(--bg-secondary);
+      padding: 1px 4px;
+      border-radius: 2px;
+    }
+    .attr-context .attr-source { background: #d4edda; color: #155724; }
+    .attr-domain .attr-source { background: #cce5ff; color: #004085; }
+    .no-attribution {
+      font-size: 0.85em;
+      color: var(--text-muted);
+      font-style: italic;
+    }
   </style>
 </head>
 <body>
@@ -466,6 +696,40 @@ function renderResultsPage(data) {
   ` : ''}
 
   ${flowHtml}
+
+  ${hasTrace ? `
+  <section class="trace-section">
+    <h2>🔍 Cognitive Debug Trace</h2>
+    <p class="trace-intro">Debug mode enabled. Inspect the prompts and raw LLM responses for each pass.</p>
+
+    ${renderTracePanel(trace.pass1, 'Pass 1: Classification & Triage', usage?.pass1?.input_tokens)}
+
+    ${trace.pass2 && trace.pass2.length > 0 ? `
+      <div class="pass2-traces">
+        <h3>Pass 2: Deep Dive Analysis (${trace.pass2.length} tabs)</h3>
+        ${trace.pass2.map((p2, i) => `
+          <details class="trace-panel pass2-panel">
+            <summary>Tab ${p2.tabIndex}: ${escapeHtml(p2.title?.slice(0, 50) || 'Unknown')}</summary>
+            <div class="trace-grid">
+              <div class="trace-prompt">
+                <h4>Deep Dive Prompt</h4>
+                <pre class="trace-code">${escapeHtml(p2.prompt || '(no prompt)')}</pre>
+              </div>
+              <div class="trace-response">
+                <h4>Raw LLM Response</h4>
+                <pre class="trace-code">${escapeHtml(p2.rawResponse || '(no response)')}</pre>
+              </div>
+            </div>
+          </details>
+        `).join('')}
+      </div>
+    ` : ''}
+
+    ${trace.pass3 && trace.pass3.prompt ? `
+      ${renderTracePanel(trace.pass3, 'Pass 3: Visualization Generation')}
+    ` : ''}
+  </section>
+  ` : ''}
 
   <section>
     <h2>Grouped Tabs</h2>
