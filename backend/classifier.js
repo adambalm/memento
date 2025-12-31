@@ -14,20 +14,61 @@ const DEFAULT_ENGINE = 'ollama-local';
 // ============================================================
 
 /**
+ * Build context injection block for the prompt
+ * If user has active projects, tell the LLM about them
+ */
+function buildContextBlock(context) {
+  if (!context || !context.activeProjects || context.activeProjects.length === 0) {
+    return { contextBlock: '', customCategories: [] };
+  }
+
+  const projectLines = context.activeProjects.map(p => {
+    const keywords = p.keywords && p.keywords.length > 0
+      ? ` (keywords: ${p.keywords.join(', ')})`
+      : '';
+    const category = `${p.categoryType || 'Project'}: ${p.name}`;
+    return `- ${p.name}${keywords} → classify as "${category}"`;
+  }).join('\n');
+
+  const customCategories = context.activeProjects.map(p =>
+    `${p.categoryType || 'Project'}: ${p.name}`
+  );
+
+  const contextBlock = `
+USER'S ACTIVE PROJECTS:
+${projectLines}
+
+If a tab clearly relates to one of these projects (matching keywords, topics, or research areas), classify it under the project-specific category instead of a generic one.
+
+`;
+
+  return { contextBlock, customCategories };
+}
+
+/**
  * Build the classification prompt for the LLM (Pass 1)
  * Uses minimal output format to force explicit enumeration of ALL tabs
+ * Accepts optional context with active projects for smarter classification
  */
-function buildPrompt(tabs) {
+function buildPrompt(tabs, context = null) {
+  const { contextBlock, customCategories } = buildContextBlock(context);
+
   const tabSummaries = tabs.map((tab, i) =>
     `${i + 1}. ${tab.title || 'Untitled'} | ${tab.url || 'unknown'}`
   ).join('\n');
 
-  return `Assign each of these ${tabs.length} browser tabs to exactly one category.
+  // Base categories + any custom project categories
+  const baseCategories = 'Development, Research, Shopping, Social Media, Entertainment, News, Communication, Productivity, Education, Finance, Health, Travel, Other';
+  const allCategories = customCategories.length > 0
+    ? `${baseCategories}, ${customCategories.join(', ')}`
+    : baseCategories;
+
+  return `${contextBlock}Assign each of these ${tabs.length} browser tabs to exactly one category.
 
 TABS:
 ${tabSummaries}
 
-Categories: Development, Research, Shopping, Social Media, Entertainment, News, Communication, Productivity, Education, Finance, Health, Travel, Other
+Categories: ${allCategories}
 
 OUTPUT FORMAT - respond with ONLY this JSON (no markdown, no explanation):
 {
@@ -414,14 +455,23 @@ async function generateVisualization(result, deepDiveResults, engine) {
  * Pass 1: Classify all tabs, identify candidates for deep dive
  * Pass 2: Run detailed analysis on flagged tabs (if any)
  * Pass 3: Generate session visualization
+ *
+ * @param {Array} tabs - Array of tab objects with url, title, content
+ * @param {string} engine - LLM engine to use (default: ollama-local)
+ * @param {Object|null} context - Optional context with activeProjects for smarter classification
  */
-async function classifyWithLLM(tabs, engine = DEFAULT_ENGINE) {
+async function classifyWithLLM(tabs, engine = DEFAULT_ENGINE, context = null) {
   const engineInfo = getEngineInfo(engine);
+
+  // Log context usage
+  if (context && context.activeProjects) {
+    console.log(`[Context] Using ${context.activeProjects.length} active project(s) for classification`);
+  }
 
   // === PASS 1: Classification + Triage ===
   console.log(`[Pass 1] Calling LLM via ${engineInfo.engine} (${engineInfo.model})...`);
   const pass1Start = Date.now();
-  const prompt = buildPrompt(tabs);
+  const prompt = buildPrompt(tabs, context);
   const pass1Response = await runModel(engine, prompt);
   const pass1Duration = Date.now() - pass1Start;
   const responseText = pass1Response.text;
@@ -678,10 +728,14 @@ async function classifyWithMock(tabs) {
 /**
  * Main classification function
  * Tries LLM first, falls back to mock classifier
+ *
+ * @param {Array} tabs - Array of tab objects with url, title, content
+ * @param {string} engine - LLM engine to use (default: ollama-local)
+ * @param {Object|null} context - Optional context with activeProjects for smarter classification
  */
-async function classifyTabs(tabs, engine = DEFAULT_ENGINE) {
+async function classifyTabs(tabs, engine = DEFAULT_ENGINE, context = null) {
   try {
-    const result = await classifyWithLLM(tabs, engine);
+    const result = await classifyWithLLM(tabs, engine, context);
     console.log(`Classification completed via ${engine}`);
     return result;
   } catch (error) {

@@ -4,6 +4,7 @@ const cors = require('cors');
 const { classifyTabs } = require('./classifier');
 const { renderResultsPage } = require('./renderer');
 const { saveSession } = require('./memory');
+const { loadContext } = require('./contextLoader');
 
 const app = express();
 const PORT = 3000;
@@ -14,7 +15,7 @@ app.use(express.json({ limit: '10mb' }));
 // POST /classifyBrowserContext - Main endpoint for tab classification
 app.post('/classifyBrowserContext', async (req, res) => {
   try {
-    const { tabs, engine } = req.body;
+    const { tabs, engine, context: requestContext } = req.body;
 
     if (!tabs || !Array.isArray(tabs)) {
       return res.status(400).json({ error: 'Invalid request: tabs array required' });
@@ -22,8 +23,11 @@ app.post('/classifyBrowserContext', async (req, res) => {
 
     console.log(`Received ${tabs.length} tabs for classification via ${engine || 'default'}`);
 
-    // Call LLM classifier with specified engine
-    const classification = await classifyTabs(tabs, engine);
+    // Load context: request context > file context > none
+    const context = requestContext || loadContext();
+
+    // Call LLM classifier with specified engine and context
+    const classification = await classifyTabs(tabs, engine, context);
 
     // Save to memory
     await saveSession(classification);
@@ -48,7 +52,7 @@ app.get('/results', (req, res) => {
 // POST /classifyAndRender - Classify and return HTML directly
 app.post('/classifyAndRender', async (req, res) => {
   try {
-    const { tabs, engine } = req.body;
+    const { tabs, engine, context: requestContext } = req.body;
 
     if (!tabs || !Array.isArray(tabs)) {
       return res.status(400).send('<html><body><h1>Error: Invalid request</h1></body></html>');
@@ -56,7 +60,10 @@ app.post('/classifyAndRender', async (req, res) => {
 
     console.log(`Received ${tabs.length} tabs for classification via ${engine || 'default'}`);
 
-    const classification = await classifyTabs(tabs, engine);
+    // Load context: request context > file context > none
+    const context = requestContext || loadContext();
+
+    const classification = await classifyTabs(tabs, engine, context);
     await saveSession(classification);
     res.send(renderResultsPage(classification));
   } catch (error) {
