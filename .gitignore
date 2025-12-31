@@ -11,4 +11,6 @@ new-*.html
 screenshot-*.js
 screenshots/
 screenshot-*.png
+tests/*.png
+tests/preview.html
 nul
