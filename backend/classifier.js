@@ -190,7 +190,7 @@ function parseLLMResponse(responseText, tabs, engineInfo) {
   }
 
   // Check for missing tabs and assign to "Unclassified"
-  const classifiedIndices = new Set(Object.keys(assignments).map(k => parseInt(k, 10)));
+  const classifiedIndices = new Set(Object.keys(rawAssignments).map(k => parseInt(k, 10)));
   const missingTabs = [];
   for (let i = 1; i <= tabs.length; i++) {
     if (!classifiedIndices.has(i)) {
