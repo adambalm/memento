@@ -6,7 +6,7 @@
 
 const { runModel, getEngineInfo } = require('./models');
 
-const SCHEMA_VERSION = '1.1.0';  // Added trace support for cognitive debugging
+const SCHEMA_VERSION = '1.2.0';  // Added Pass 4: Thematic Analysis & Action Synthesis
 const DEFAULT_ENGINE = 'ollama-local';
 
 // ============================================================
@@ -592,10 +592,192 @@ async function generateVisualization(result, deepDiveResults, engine, debugMode 
 }
 
 /**
- * Classify tabs using LLM (three-pass architecture)
+ * Build the thematic analysis prompt for Pass 4
+ * Analyzes cross-category relationships and suggests actions
+ */
+function buildThematicPrompt(result, tabs, context, deepDiveResults) {
+  // Build project list
+  const projectList = context?.activeProjects?.map(p => {
+    const keywords = p.keywords?.length > 0 ? ` (keywords: ${p.keywords.join(', ')})` : '';
+    return `- ${p.name}${keywords} [${p.categoryType || 'Project'}]`;
+  }).join('\n') || 'No active projects defined';
+
+  // Build category summary
+  const categorySummary = Object.entries(result.groups)
+    .map(([cat, catTabs]) => `${cat}: tabs ${catTabs.map(t => t.tabIndex).join(', ')}`)
+    .join('\n');
+
+  // Build deep dive summary
+  const deepDiveSummary = deepDiveResults?.length > 0
+    ? deepDiveResults.map(d => {
+        if (d.analysis) {
+          const entities = [];
+          if (d.analysis.entities?.authors?.length) entities.push(`authors: ${d.analysis.entities.authors.join(', ')}`);
+          if (d.analysis.entities?.organizations?.length) entities.push(`orgs: ${d.analysis.entities.organizations.join(', ')}`);
+          if (d.analysis.entities?.technologies?.length) entities.push(`tech: ${d.analysis.entities.technologies.join(', ')}`);
+          return `Tab "${d.title}": ${d.analysis.summary || 'analyzed'}${entities.length > 0 ? ` [${entities.join('; ')}]` : ''}`;
+        }
+        return `Tab "${d.title}": (analysis failed)`;
+      }).join('\n')
+    : 'None';
+
+  // Build tab list with titles
+  const tabList = tabs.map((t, i) =>
+    `${i + 1}. ${t.title || 'Untitled'} | ${t.url || 'unknown'}`
+  ).join('\n');
+
+  return `You are analyzing a browsing session for thematic relationships and action opportunities.
+
+USER'S ACTIVE PROJECTS:
+${projectList}
+
+SESSION CLASSIFICATION (from Pass 1):
+Narrative: ${result.narrative}
+Session Intent: ${result.sessionIntent || 'Not specified'}
+
+Categories:
+${categorySummary}
+
+DEEP ANALYSIS (from Pass 2):
+${deepDiveSummary}
+
+TAB LIST:
+${tabList}
+
+USER PROFILE (for action synthesis):
+- Works on complex parallel projects (fiction, technical, research)
+- Tendency toward productive research rabbit holes that can become avoidance
+- Values depth over quick wins
+- Risk: analysis paralysis disguised as research
+- Goal: turn intake into output
+
+TASK:
+1. Identify which tabs support which projects, EVEN IF CLASSIFIED IN DIFFERENT CATEGORIES
+   - A "Research" tab about authorship may support a "Creative Writing" project
+   - Look for THEMATIC connections, not just keyword matches
+2. Find thematic throughlines connecting tabs across categories
+3. Suggest 2-3 concrete actions the user should take (achievable in 30 minutes)
+
+OUTPUT FORMAT - respond with ONLY this JSON (no markdown, no explanation):
+{
+  "projectSupport": {
+    "ProjectName": {
+      "directTabs": [1, 3],
+      "supportingTabs": [9, 17],
+      "supportingEvidence": [
+        {"tabIndex": 9, "reason": "why this tab supports the project"}
+      ]
+    }
+  },
+  "thematicThroughlines": [
+    {
+      "theme": "Theme name",
+      "tabs": [9, 15, 17],
+      "projects": ["Project1", "Project2"],
+      "insight": "Why these connect and what it means"
+    }
+  ],
+  "alternativeNarrative": "1-2 sentences reframing the session through thematic lens rather than categorical",
+  "suggestedActions": [
+    {
+      "action": "Specific action (e.g. 'Write 500 words on X')",
+      "project": "ProjectName or 'system'",
+      "reason": "Why this action now",
+      "priority": "high|medium|low",
+      "tabsToClose": [11, 22]
+    }
+  ],
+  "sessionPattern": {
+    "type": "research-heavy|output-focused|balanced|scattered",
+    "intakeVsOutput": "X% intake, Y% output",
+    "riskFlags": ["analysis paralysis", "scope creep", etc.],
+    "recommendation": "One sentence on what to do"
+  }
+}
+
+CRITICAL:
+- Look for IMPLICIT connections, not just keyword matches
+- A tab about "The Rise and Fall of the Author" relates to fiction about authorship even without matching keywords
+- Actions should be specific and achievable in 30 minutes
+- Consider the user's tendency toward research over production`;
+}
+
+/**
+ * Run thematic analysis (Pass 4) - conditional on having active projects
+ * @param {Object} result - Classification result from Passes 1-3
+ * @param {Array} tabs - Original tab array
+ * @param {Object|null} context - Context with activeProjects
+ * @param {string} engine - LLM engine to use
+ * @param {boolean} debugMode - If true, include prompt and raw response
+ * @returns {Object} Thematic analysis result or null if skipped
+ */
+async function analyzeThematicRelationships(result, tabs, context, engine, debugMode = false) {
+  // Only run if there are active projects
+  if (!context || !context.activeProjects || context.activeProjects.length === 0) {
+    console.log('[Pass 4] Skipped - no active projects in context');
+    return null;
+  }
+
+  const prompt = buildThematicPrompt(result, tabs, context, result.deepDiveResults);
+
+  try {
+    const response = await runModel(engine, prompt);
+    const responseText = response.text;
+
+    // Parse the response
+    let cleanedText = stripAnsiCodes(responseText).trim();
+
+    // Handle markdown code blocks
+    const jsonMatch = cleanedText.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (jsonMatch) {
+      cleanedText = jsonMatch[1].trim();
+    }
+
+    // Find JSON object boundaries
+    const startIdx = cleanedText.indexOf('{');
+    const endIdx = cleanedText.lastIndexOf('}');
+    if (startIdx !== -1 && endIdx !== -1) {
+      cleanedText = cleanedText.slice(startIdx, endIdx + 1);
+    }
+
+    const parsed = JSON.parse(cleanedText);
+
+    const thematicResult = {
+      projectSupport: parsed.projectSupport || {},
+      thematicThroughlines: Array.isArray(parsed.thematicThroughlines) ? parsed.thematicThroughlines : [],
+      alternativeNarrative: parsed.alternativeNarrative || null,
+      suggestedActions: Array.isArray(parsed.suggestedActions) ? parsed.suggestedActions : [],
+      sessionPattern: parsed.sessionPattern || null
+    };
+
+    // Include trace data if debugging
+    if (debugMode) {
+      thematicResult.trace = {
+        prompt: prompt,
+        rawResponse: responseText
+      };
+    }
+
+    return thematicResult;
+  } catch (error) {
+    console.warn(`[Pass 4] Thematic analysis failed: ${error.message}`);
+    return {
+      error: error.message,
+      projectSupport: {},
+      thematicThroughlines: [],
+      alternativeNarrative: null,
+      suggestedActions: [],
+      sessionPattern: null
+    };
+  }
+}
+
+/**
+ * Classify tabs using LLM (four-pass architecture)
  * Pass 1: Classify all tabs, identify candidates for deep dive
  * Pass 2: Run detailed analysis on flagged tabs (if any)
  * Pass 3: Generate session visualization
+ * Pass 4: Thematic analysis & action synthesis (if projects exist)
  *
  * @param {Array} tabs - Array of tab objects with url, title, content
  * @param {string} engine - LLM engine to use (default: ollama-local)
@@ -610,6 +792,7 @@ async function classifyWithLLM(tabs, engine = DEFAULT_ENGINE, context = null, de
     pass1: {},
     pass2: [],
     pass3: {},
+    pass4: {},
     perTabAttribution: {}
   } : null;
 
@@ -745,6 +928,32 @@ async function classifyWithLLM(tabs, engine = DEFAULT_ENGINE, context = null, de
       error: vizResult.error
     };
     console.warn(`[Pass 3] Visualization failed: ${vizResult.error}`);
+  }
+
+  // === PASS 4: Thematic Analysis (Conditional) ===
+  const pass4Start = Date.now();
+  console.log('[Pass 4] Analyzing thematic relationships...');
+  const thematicResult = await analyzeThematicRelationships(result, tabs, context, engine, debugMode);
+  const pass4Duration = Date.now() - pass4Start;
+
+  if (thematicResult) {
+    result.thematicAnalysis = thematicResult;
+    result.meta.passes = 4;
+    result.meta.timing.pass4 = pass4Duration;
+    result.meta.timing.total = pass1Duration + (result.meta.timing.pass2 || 0) + pass3Duration + pass4Duration;
+    console.log(`[Pass 4] Complete. ${thematicResult.suggestedActions?.length || 0} action(s) suggested in ${pass4Duration}ms`);
+    console.log(`[Timing] Pass1: ${pass1Duration}ms, Pass2: ${result.meta.timing.pass2 || 0}ms, Pass3: ${pass3Duration}ms, Pass4: ${pass4Duration}ms, Total: ${result.meta.timing.total}ms`);
+
+    // Capture Pass 4 trace
+    if (debugMode && thematicResult.trace) {
+      trace.pass4 = {
+        prompt: thematicResult.trace.prompt,
+        rawResponse: thematicResult.trace.rawResponse
+      };
+    }
+  } else {
+    result.thematicAnalysis = null;
+    console.log('[Pass 4] Skipped - no thematic analysis performed');
   }
 
   // === Debug Mode: Compute per-tab attribution and attach trace ===

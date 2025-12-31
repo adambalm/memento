@@ -108,8 +108,134 @@ function renderTabAttribution(tabIndex, attribution) {
   `;
 }
 
+/**
+ * Render thematic analysis section (Pass 4)
+ * Shows project support relationships, throughlines, and session pattern
+ */
+function renderThematicAnalysis(thematicAnalysis) {
+  if (!thematicAnalysis) return '';
+
+  const { projectSupport, thematicThroughlines, alternativeNarrative, sessionPattern } = thematicAnalysis;
+
+  // Project support section
+  const projectSupportHtml = Object.keys(projectSupport || {}).length > 0 ? `
+    <div class="project-support">
+      <h3>Cross-Category Project Support</h3>
+      ${Object.entries(projectSupport).map(([project, support]) => `
+        <div class="project-support-item">
+          <h4>${escapeHtml(project)}</h4>
+          ${support.directTabs?.length > 0 ? `
+            <p class="direct-tabs"><strong>Direct:</strong> tabs ${support.directTabs.join(', ')}</p>
+          ` : ''}
+          ${support.supportingTabs?.length > 0 ? `
+            <p class="supporting-tabs"><strong>Supporting:</strong> tabs ${support.supportingTabs.join(', ')}</p>
+          ` : ''}
+          ${support.supportingEvidence?.length > 0 ? `
+            <ul class="support-evidence">
+              ${support.supportingEvidence.map(e => `
+                <li><span class="tab-ref">Tab ${e.tabIndex}</span> ${escapeHtml(e.reason)}</li>
+              `).join('')}
+            </ul>
+          ` : ''}
+        </div>
+      `).join('')}
+    </div>
+  ` : '';
+
+  // Thematic throughlines section
+  const throughlinesHtml = thematicThroughlines?.length > 0 ? `
+    <div class="thematic-throughlines">
+      <h3>Thematic Throughlines</h3>
+      ${thematicThroughlines.map(t => `
+        <div class="throughline-item">
+          <h4>${escapeHtml(t.theme)}</h4>
+          <p class="throughline-tabs">Tabs: ${(t.tabs || []).join(', ')}</p>
+          ${t.projects?.length > 0 ? `<p class="throughline-projects">Projects: ${t.projects.map(p => escapeHtml(p)).join(', ')}</p>` : ''}
+          ${t.insight ? `<p class="throughline-insight">${escapeHtml(t.insight)}</p>` : ''}
+        </div>
+      `).join('')}
+    </div>
+  ` : '';
+
+  // Session pattern section
+  const sessionPatternHtml = sessionPattern ? `
+    <div class="session-pattern">
+      <h3>Session Pattern</h3>
+      <div class="pattern-details">
+        <span class="pattern-type pattern-${sessionPattern.type || 'unknown'}">${escapeHtml(sessionPattern.type || 'Unknown')}</span>
+        ${sessionPattern.intakeVsOutput ? `<span class="intake-output">${escapeHtml(sessionPattern.intakeVsOutput)}</span>` : ''}
+      </div>
+      ${sessionPattern.riskFlags?.length > 0 ? `
+        <p class="risk-flags"><strong>Risk flags:</strong> ${sessionPattern.riskFlags.map(f => escapeHtml(f)).join(', ')}</p>
+      ` : ''}
+      ${sessionPattern.recommendation ? `
+        <p class="pattern-recommendation">${escapeHtml(sessionPattern.recommendation)}</p>
+      ` : ''}
+    </div>
+  ` : '';
+
+  // Alternative narrative
+  const altNarrativeHtml = alternativeNarrative ? `
+    <div class="alternative-narrative">
+      <h3>Alternative Perspective</h3>
+      <p>${escapeHtml(alternativeNarrative)}</p>
+    </div>
+  ` : '';
+
+  return `
+    <section class="thematic-section">
+      <h2>Thematic Analysis</h2>
+      ${altNarrativeHtml}
+      ${projectSupportHtml}
+      ${throughlinesHtml}
+      ${sessionPatternHtml}
+    </section>
+  `;
+}
+
+/**
+ * Render action cards for suggested actions (Pass 4)
+ * Advisory buttons with mocked functionality
+ */
+function renderActionCards(suggestedActions) {
+  if (!suggestedActions || suggestedActions.length === 0) return '';
+
+  const priorityOrder = { high: 0, medium: 1, low: 2 };
+  const sortedActions = [...suggestedActions].sort((a, b) =>
+    (priorityOrder[a.priority] || 3) - (priorityOrder[b.priority] || 3)
+  );
+
+  return `
+    <section class="action-section">
+      <h2>What To Do Now</h2>
+      <div class="action-cards">
+        ${sortedActions.map(action => `
+          <div class="action-card priority-${action.priority || 'medium'}">
+            <div class="action-header">
+              <span class="priority-badge">${escapeHtml(action.priority || 'medium')}</span>
+              ${action.project ? `<span class="project-tag">${escapeHtml(action.project)}</span>` : ''}
+            </div>
+            <p class="action-text">${escapeHtml(action.action)}</p>
+            ${action.reason ? `<p class="action-reason">${escapeHtml(action.reason)}</p>` : ''}
+            <div class="action-buttons">
+              <button class="btn-primary" onclick="alert('Action: ${escapeHtml(action.action).replace(/'/g, "\\'")}\\n\\nThis is a mock button. In a future version, this could open your writing app or copy notes to clipboard.')">
+                Start
+              </button>
+              ${action.tabsToClose?.length > 0 ? `
+                <button class="btn-secondary" onclick="alert('Would close tabs: ${action.tabsToClose.join(', ')}\\n\\nThis requires browser extension integration.')">
+                  Close ${action.tabsToClose.length} tab${action.tabsToClose.length > 1 ? 's' : ''}
+                </button>
+              ` : ''}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </section>
+  `;
+}
+
 function renderResultsPage(data) {
-  const { narrative, groups, tasks, summary, timestamp, totalTabs, source, meta, deepDiveResults, deepDive, trace } = data;
+  const { narrative, groups, tasks, summary, timestamp, totalTabs, source, meta, deepDiveResults, deepDive, trace, thematicAnalysis } = data;
 
   const safeSource = source || 'unknown';
   const modelName = meta?.model || null;
@@ -173,6 +299,18 @@ function renderResultsPage(data) {
         <h3>Pass 3 — Synthesis</h3>
         <p class="flow-desc">Combined classification results with deep analysis insights to generate narrative summary.</p>
       </div>
+
+      ${thematicAnalysis ? `
+        <div class="flow-stage">
+          <h3>Pass 4 — Thematic Analysis</h3>
+          <p class="flow-desc">Analyzed cross-category relationships. Found ${thematicAnalysis.thematicThroughlines?.length || 0} thematic throughlines and generated ${thematicAnalysis.suggestedActions?.length || 0} suggested actions.</p>
+          ${thematicAnalysis.sessionPattern ? `
+            <div class="session-pattern-summary">
+              <p><strong>Pattern:</strong> ${escapeHtml(thematicAnalysis.sessionPattern.type || 'unknown')} — ${escapeHtml(thematicAnalysis.sessionPattern.recommendation || '')}</p>
+            </div>
+          ` : ''}
+        </div>
+      ` : ''}
     </section>
   `;
 
@@ -270,7 +408,7 @@ function renderResultsPage(data) {
   ` : '';
 
   // Timing (at the end, as diagnostic info)
-  const totalTime = timing.total || (timing.pass1 || 0) + (timing.pass2 || 0) + (timing.pass3 || 0);
+  const totalTime = timing.total || (timing.pass1 || 0) + (timing.pass2 || 0) + (timing.pass3 || 0) + (timing.pass4 || 0);
   const timingHtml = totalTime ? `
     <section class="timing-section">
       <h2>Timing</h2>
@@ -278,6 +416,7 @@ function renderResultsPage(data) {
         <tr><td>Pass 1 (Classify)</td><td class="timing-value">${((timing.pass1 || 0) / 1000).toFixed(1)}s</td></tr>
         <tr><td>Pass 2 (Deep Dive)</td><td class="timing-value">${((timing.pass2 || 0) / 1000).toFixed(1)}s</td></tr>
         <tr><td>Pass 3 (Synthesis)</td><td class="timing-value">${((timing.pass3 || 0) / 1000).toFixed(1)}s</td></tr>
+        ${timing.pass4 ? `<tr><td>Pass 4 (Thematic)</td><td class="timing-value">${((timing.pass4 || 0) / 1000).toFixed(1)}s</td></tr>` : ''}
         <tr class="total"><td>Total</td><td class="timing-value">${(totalTime / 1000).toFixed(1)}s</td></tr>
       </table>
     </section>
@@ -717,6 +856,198 @@ function renderResultsPage(data) {
       color: var(--text-muted);
       font-style: italic;
     }
+
+    /* Thematic Analysis Section */
+    .thematic-section {
+      background: linear-gradient(135deg, #f8f7f2 0%, #f5f4ef 100%);
+      padding: 1.5em;
+      margin: 2em 0;
+      border-radius: 6px;
+      border: 1px solid var(--border-light);
+    }
+    .thematic-section h2 {
+      margin-top: 0;
+      color: #4a4a4a;
+    }
+    .alternative-narrative {
+      background: #fff8e6;
+      padding: 1em;
+      margin-bottom: 1.5em;
+      border-left: 4px solid #f0ad4e;
+      border-radius: 0 4px 4px 0;
+    }
+    .alternative-narrative h3 {
+      margin-top: 0;
+      font-size: 1em;
+      color: #856404;
+    }
+    .alternative-narrative p {
+      margin: 0;
+      font-style: italic;
+    }
+    .project-support, .thematic-throughlines, .session-pattern {
+      margin-bottom: 1.5em;
+    }
+    .project-support-item, .throughline-item {
+      background: var(--bg-primary);
+      padding: 0.75em 1em;
+      margin: 0.5em 0;
+      border-radius: 4px;
+      border-left: 3px solid #6b6b6b;
+    }
+    .project-support-item h4, .throughline-item h4 {
+      margin: 0 0 0.5em 0;
+      font-size: 1em;
+      color: var(--text-secondary);
+    }
+    .support-evidence {
+      margin: 0.5em 0 0 0;
+      padding-left: 1.5em;
+      font-size: 0.9em;
+    }
+    .support-evidence li {
+      margin: 0.25em 0;
+    }
+    .throughline-tabs, .throughline-projects {
+      font-size: 0.9em;
+      color: var(--text-muted);
+      margin: 0.25em 0;
+    }
+    .throughline-insight {
+      font-style: italic;
+      margin: 0.5em 0 0 0;
+    }
+    .session-pattern {
+      background: var(--bg-primary);
+      padding: 1em;
+      border-radius: 4px;
+    }
+    .session-pattern h3 {
+      margin-top: 0;
+    }
+    .pattern-details {
+      display: flex;
+      gap: 1em;
+      align-items: center;
+      margin-bottom: 0.5em;
+    }
+    .pattern-type {
+      font-family: Consolas, monospace;
+      padding: 3px 8px;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    .pattern-research-heavy { background: #fff3cd; color: #856404; }
+    .pattern-output-focused { background: #d4edda; color: #155724; }
+    .pattern-balanced { background: #cce5ff; color: #004085; }
+    .pattern-scattered { background: #f8d7da; color: #721c24; }
+    .intake-output {
+      font-size: 0.85em;
+      color: var(--text-muted);
+    }
+    .risk-flags {
+      font-size: 0.9em;
+      color: #856404;
+      margin: 0.5em 0;
+    }
+    .pattern-recommendation {
+      font-weight: 600;
+      margin: 0.5em 0 0 0;
+    }
+
+    /* Action Cards */
+    .action-section {
+      margin: 2em 0;
+    }
+    .action-section h2 {
+      margin-bottom: 1em;
+    }
+    .action-cards {
+      display: grid;
+      gap: 1em;
+    }
+    .action-card {
+      background: var(--bg-primary);
+      border: 2px solid var(--border-light);
+      border-radius: 8px;
+      padding: 1.25em;
+      transition: box-shadow 0.2s;
+    }
+    .action-card:hover {
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .action-card.priority-high {
+      border-left: 4px solid #28a745;
+      background: linear-gradient(90deg, #f0fff0 0%, var(--bg-primary) 30%);
+    }
+    .action-card.priority-medium {
+      border-left: 4px solid #ffc107;
+      background: linear-gradient(90deg, #fffef0 0%, var(--bg-primary) 30%);
+    }
+    .action-card.priority-low {
+      border-left: 4px solid #6c757d;
+    }
+    .action-header {
+      display: flex;
+      gap: 0.75em;
+      align-items: center;
+      margin-bottom: 0.75em;
+    }
+    .priority-badge {
+      font-family: Consolas, monospace;
+      font-size: 0.75em;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: 3px;
+      background: var(--bg-secondary);
+      color: var(--text-muted);
+    }
+    .priority-high .priority-badge { background: #d4edda; color: #155724; }
+    .priority-medium .priority-badge { background: #fff3cd; color: #856404; }
+    .project-tag {
+      font-size: 0.85em;
+      color: var(--text-secondary);
+      font-style: italic;
+    }
+    .action-text {
+      font-size: 1.1em;
+      font-weight: 500;
+      margin: 0 0 0.5em 0;
+      color: var(--text-primary);
+    }
+    .action-reason {
+      font-size: 0.9em;
+      color: var(--text-muted);
+      margin: 0 0 1em 0;
+    }
+    .action-buttons {
+      display: flex;
+      gap: 0.75em;
+    }
+    .btn-primary, .btn-secondary {
+      font-family: inherit;
+      font-size: 0.9em;
+      padding: 0.5em 1em;
+      border-radius: 4px;
+      cursor: pointer;
+      border: none;
+      transition: background 0.2s;
+    }
+    .btn-primary {
+      background: #4a4a4a;
+      color: white;
+    }
+    .btn-primary:hover {
+      background: #333;
+    }
+    .btn-secondary {
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+      border: 1px solid var(--border-light);
+    }
+    .btn-secondary:hover {
+      background: #e8e8e0;
+    }
   </style>
 </head>
 <body>
@@ -770,6 +1101,10 @@ function renderResultsPage(data) {
     ${trace.pass3 && trace.pass3.prompt ? `
       ${renderTracePanel(trace.pass3, 'Pass 3: Visualization Generation')}
     ` : ''}
+
+    ${trace.pass4 && trace.pass4.prompt ? `
+      ${renderTracePanel(trace.pass4, 'Pass 4: Thematic Analysis & Actions')}
+    ` : ''}
   </section>
   ` : ''}
 
@@ -779,6 +1114,10 @@ function renderResultsPage(data) {
   </section>
 
   ${deepDiveHtml}
+
+  ${renderThematicAnalysis(thematicAnalysis)}
+
+  ${renderActionCards(thematicAnalysis?.suggestedActions)}
 
   ${tasksHtml}
 
