@@ -98,13 +98,27 @@ function renderResultsPage(data) {
     </section>
   ` : '';
 
-  // Grouped tabs
+  // Grouped tabs with margin notes for reasoning
+  const reasoning = data.reasoning?.perTab || {};
   const groupsHtml = Object.entries(groups).map(([category, tabs]) => `
     <h3>${escapeHtml(category)} <span class="count">(${tabs.length})</span></h3>
     <ul class="tab-list">
-      ${tabs.map(tab => `
-        <li><a href="${escapeHtml(tab.url)}" target="_blank">${escapeHtml(tab.title)}</a></li>
-      `).join('')}
+      ${tabs.map(tab => {
+        const r = reasoning[tab.tabIndex] || {};
+        const signals = r.signals || [];
+        const confidence = r.confidence || 'unknown';
+        const hasReasoning = signals.length > 0 || confidence !== 'unknown';
+        return `
+        <li class="tab-item">
+          <a href="${escapeHtml(tab.url)}" target="_blank">${escapeHtml(tab.title)}</a>
+          ${hasReasoning ? `
+            <span class="margin-note">
+              <span class="confidence confidence-${confidence}">${confidence}</span>
+              ${signals.length > 0 ? `<span class="signals">${signals.map(s => escapeHtml(s)).join(', ')}</span>` : ''}
+            </span>
+          ` : ''}
+        </li>`;
+      }).join('')}
     </ul>
   `).join('');
 
@@ -209,7 +223,16 @@ function renderResultsPage(data) {
     section { margin-bottom: 2em; }
     a { color: var(--accent-link); text-decoration: none; }
     a:hover { text-decoration: underline; }
-    .summary { font-size: 1.05em; margin-bottom: 1.5em; }
+    .summary { font-size: 1.05em; margin-bottom: 1em; }
+    .uncertainties {
+      font-size: 0.9em;
+      color: var(--text-muted);
+      font-style: italic;
+      margin-bottom: 1.5em;
+      padding: 0.5em 1em;
+      background: #fff8e6;
+      border-left: 3px solid #f0ad4e;
+    }
     .count { color: var(--text-muted); font-weight: normal; font-style: normal; }
 
     /* Flow trace */
@@ -320,13 +343,43 @@ function renderResultsPage(data) {
     .deep-dive li { margin-bottom: 0.25em; }
     .error { color: var(--accent-link); font-style: italic; }
 
-    /* Tab list */
+    /* Tab list with margin notes */
     .tab-list { list-style: none; margin-left: 0; }
-    .tab-list li {
-      padding: 0.3em 0;
+    .tab-item {
+      padding: 0.4em 0;
       border-bottom: 1px solid var(--border-light);
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 1em;
     }
-    .tab-list li:last-child { border-bottom: none; }
+    .tab-item:last-child { border-bottom: none; }
+    .tab-item > a { flex: 1; min-width: 0; }
+
+    /* Margin notes - Tufte style */
+    .margin-note {
+      flex-shrink: 0;
+      font-size: 0.8em;
+      color: var(--text-muted);
+      text-align: right;
+      max-width: 40%;
+    }
+    .confidence {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-family: Consolas, monospace;
+      font-size: 0.85em;
+      margin-right: 0.5em;
+    }
+    .confidence-high { background: #d4edda; color: #155724; }
+    .confidence-medium { background: #fff3cd; color: #856404; }
+    .confidence-low { background: #f8d7da; color: #721c24; }
+    .confidence-unknown { background: var(--bg-secondary); color: var(--text-muted); }
+    .signals {
+      font-style: italic;
+      font-size: 0.9em;
+    }
 
     /* Tasks table */
     .tasks-table {
@@ -407,6 +460,10 @@ function renderResultsPage(data) {
   </header>
 
   <p class="summary">${escapeHtml(narrative)}</p>
+
+  ${data.reasoning?.uncertainties?.length > 0 ? `
+    <p class="uncertainties"><strong>Uncertainties:</strong> ${data.reasoning.uncertainties.map(u => escapeHtml(u)).join('; ')}</p>
+  ` : ''}
 
   ${flowHtml}
 
