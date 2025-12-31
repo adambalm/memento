@@ -183,13 +183,38 @@ function renderResultsPage(data) {
       ${deepDiveResults.map(dive => `
         <article class="deep-dive">
           <h3><a href="${escapeHtml(dive.url)}" target="_blank">${escapeHtml(dive.title)}</a></h3>
-          <p class="reason">${escapeHtml(dive.reason)}</p>
           ${dive.analysis ? `
-            <p>${escapeHtml(dive.analysis.summary || '')}</p>
+            <div class="analysis-summary">
+              <h4>Summary</h4>
+              <p>${escapeHtml(dive.analysis.summary || 'No summary available')}</p>
+            </div>
             ${dive.analysis.keyPoints && dive.analysis.keyPoints.length > 0 ? `
-              <ul>
-                ${dive.analysis.keyPoints.map(pt => `<li>${escapeHtml(pt)}</li>`).join('')}
-              </ul>
+              <div class="analysis-keypoints">
+                <h4>Key Points</h4>
+                <ul>
+                  ${dive.analysis.keyPoints.map(pt => `<li>${escapeHtml(pt)}</li>`).join('')}
+                </ul>
+              </div>
+            ` : ''}
+            ${dive.analysis.entities && (
+              (dive.analysis.entities.authors && dive.analysis.entities.authors.length > 0) ||
+              (dive.analysis.entities.organizations && dive.analysis.entities.organizations.length > 0) ||
+              (dive.analysis.entities.technologies && dive.analysis.entities.technologies.length > 0)
+            ) ? `
+              <div class="analysis-entities">
+                <h4>Entities</h4>
+                <dl>
+                  ${dive.analysis.entities.authors?.length > 0 ? `<dt>Authors</dt><dd>${dive.analysis.entities.authors.map(e => escapeHtml(e)).join(', ')}</dd>` : ''}
+                  ${dive.analysis.entities.organizations?.length > 0 ? `<dt>Organizations</dt><dd>${dive.analysis.entities.organizations.map(e => escapeHtml(e)).join(', ')}</dd>` : ''}
+                  ${dive.analysis.entities.technologies?.length > 0 ? `<dt>Technologies</dt><dd>${dive.analysis.entities.technologies.map(e => escapeHtml(e)).join(', ')}</dd>` : ''}
+                </dl>
+              </div>
+            ` : ''}
+            ${dive.analysis.relevance ? `
+              <div class="analysis-relevance">
+                <h4>Relevance</h4>
+                <p>${escapeHtml(dive.analysis.relevance)}</p>
+              </div>
             ` : ''}
           ` : '<p class="error">Analysis failed</p>'}
         </article>
@@ -436,12 +461,29 @@ function renderResultsPage(data) {
     }
     .deep-dive:last-child { border-bottom: none; }
     .deep-dive h3 { margin-top: 0; }
-    .reason {
-      font-style: italic;
-      color: var(--text-muted);
+    .deep-dive h4 {
       font-size: 0.9em;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin: 1em 0 0.25em 0;
+      font-style: normal;
+    }
+    .deep-dive h4:first-child { margin-top: 0; }
+    .analysis-summary, .analysis-keypoints, .analysis-entities, .analysis-relevance {
       margin-bottom: 0.75em;
     }
+    .analysis-entities dl {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.25em 1em;
+      margin: 0;
+      font-size: 0.9em;
+    }
+    .analysis-entities dt {
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+    .analysis-entities dd { margin: 0; }
     .deep-dive ul { margin-left: 1.5em; margin-top: 0.5em; }
     .deep-dive li { margin-bottom: 0.25em; }
     .error { color: var(--accent-link); font-style: italic; }

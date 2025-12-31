@@ -77,10 +77,10 @@ OUTPUT FORMAT - respond with ONLY this JSON (no markdown, no explanation):
     "2": {"category": "Category", "signals": ["signal1"], "confidence": "medium"}
   },
   "narrative": "2-3 sentence summary of user's browsing focus",
-  "sessionIntent": "1 sentence hypothesis about what user is trying to accomplish",
+  "sessionIntent": "2-3 sentence hypothesis about what the user is trying to accomplish. Be specific about goals, workflows, or problems they appear to be solving.",
   "deepDive": [5, 12],
   "overallConfidence": "high|medium|low",
-  "uncertainties": ["any tabs or patterns you're uncertain about"]
+  "uncertainties": ["Describe specific tabs or patterns you're uncertain about AND why. E.g. 'Tab 7 could be Research or Education - title suggests academic but URL is blog'"]
 }
 
 CRITICAL RULES:
@@ -88,8 +88,8 @@ CRITICAL RULES:
 2. Every value must be an object with "category", "signals", and "confidence" fields
 3. "signals" = evidence that led to this classification (URL patterns, title keywords, known sites)
 4. "confidence" = how certain: high (clear signals), medium (some ambiguity), low (guessing)
-5. "sessionIntent" = your hypothesis about what the user is trying to accomplish overall
-6. "uncertainties" = be explicit about what you're unsure of - this enables human correction
+5. "sessionIntent" = Be verbose. Explain what goal or workflow the user appears to be pursuing. Don't just name categories.
+6. "uncertainties" = Be explicit AND explanatory. For each uncertainty, explain the ambiguity. This enables human correction.
 7. "deepDive" = array of tab numbers for technical docs needing deeper analysis. Empty [] if none.
 8. DO NOT skip any tabs. List ALL ${tabs.length} assignments with reasoning.
 
@@ -685,16 +685,6 @@ async function classifyWithLLM(tabs, engine = DEFAULT_ENGINE, context = null, de
 
     // Fold deep dive results into the main result
     result.deepDiveResults = deepDiveResults;
-
-    // Enhance narrative with deep dive insights
-    const insights = deepDiveResults
-      .filter(d => d.analysis && d.analysis.summary)
-      .map(d => d.analysis.summary)
-      .join(' ');
-
-    if (insights) {
-      result.narrative += ` [Deep analysis: ${insights}]`;
-    }
 
     // Update meta to reflect two passes
     result.meta.passes = 2;
