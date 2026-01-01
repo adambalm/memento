@@ -5,7 +5,7 @@
 **Protocol:** Lanesborough Protocol
 **Pattern:** Skill Forge (see Basic Memory: `patterns/skill-forge-pattern`)
 **Invoked:** 2026-01-01
-**Status:** TURN 3 - GA responding to IA verification flags
+**Status:** HANDSHAKE PROPOSED - Awaiting GA acceptance and HO articulation
 **Max Iterations:** 5
 **Transport:** Manual (HO copies log to ChatGPT, pastes response back)
 
@@ -681,3 +681,122 @@ Position
 
 IA Statement:
 If HO can articulate this decision in their own words without contradiction, the protocol has succeeded.
+
+---
+
+## Turn 5: GA (Claude Code)
+**Timestamp:** 2026-01-01T11:35:00Z
+**Type:** handshake
+
+### Summary
+
+GA accepts IA's handshake proposal. Understanding Gate closed, Agreement Gate closing. Summarizing what was agreed and requesting HO articulation to complete the protocol.
+
+### Content
+
+#### Handshake Acceptance
+
+**Agreed.**
+
+I accept IA's handshake proposal. The deliberation has produced a coherent architecture with explicit design commitments.
+
+#### Summary of What Was Agreed
+
+**1. Memento MCP Server Architecture**
+
+```
+Session Query Tools:
+- list_sessions() -> [{timestamp, tabCount, narrative, sessionPattern}]
+- read_session(id) -> full session JSON
+- get_latest() -> most recent session
+- search_sessions(query) -> sessions matching keywords
+
+Context Management Tools:
+- get_active_projects() -> current context.json content
+- set_active_projects([{name, keywords, categoryType}]) -> update context
+
+Re-classification Tools:
+- reclassify_session(session_id, scope='pass4'|'full')
+  -> new_classification_id (append-only)
+```
+
+**2. Boundary Discipline**
+- Memento MCP = sessions + classification mechanics ONLY
+- Basic Memory MCP = projects + long-term knowledge
+- Claude Desktop = sole orchestrator between both
+- `refresh_context_from_basic_memory()` explicitly rejected
+
+**3. Context Model**
+- context.json is **authoritative config**, not derived state
+- Simple provenance: "set at timestamp T by agent A"
+- No automatic regeneration or derivation chains
+
+**4. Session Immutability**
+- Original sessions are never overwritten
+- Re-classification creates new linked artifacts with:
+  - `derived_from`: original session ID
+  - `context_version`: hash/timestamp of context used
+  - `reclassified_at`: timestamp
+  - `reclassified_by`: agent identifier
+
+**5. Re-classification Scope**
+- Default: Pass 4 only (thematic analysis)
+- Opt-in: Full re-run of all passes
+
+**6. Failure Mode Mitigations**
+- Context snapshotted at classification start
+- Rate limiting on `set_active_projects()`
+- Graceful degradation if Basic Memory unreachable
+
+#### Residual Concerns (Logged, Not Blockers)
+
+Per IA, these are future pressure points consciously deferred:
+
+| Concern | Status |
+|---------|--------|
+| Derived context with provenance | Deferred — authoritative config is simpler for now |
+| Desktop trust concentration | Accepted — architecturally clean |
+| Re-classification artifact pruning | Deferred — no policy yet |
+
+#### HO Certification Request
+
+IA flagged two claims as `[cannot verify]`:
+1. Claude Desktop can orchestrate between MCP servers
+2. Claude Desktop has access to Basic Memory MCP
+
+**Request:** HO may certify these implicitly as part of their articulation, or explicitly if preferred.
+
+### Gate Status
+- Understanding Gate: **CLOSED** ✓
+- Agreement Gate: **CLOSED** (pending HO articulation)
+
+### Questions for Other Party
+
+None — proposing handshake.
+
+### Position
+
+[x] **HANDSHAKE ACCEPTED**
+[ ] Requesting refinement
+[ ] Escalating to HO
+
+---
+
+## HANDSHAKE COMPLETE
+
+**GA and IA have reached agreement.**
+
+The protocol now requires **HO articulation** to complete:
+
+> Ed (HO): Please articulate the core decision in your own words. This proves qualification and becomes the substrate for the reusable skill.
+
+If HO can restate what was decided without contradiction, the Skill Forge protocol has succeeded.
+
+---
+
+## HO Articulation
+**Status:** Awaiting Ed's articulation
+
+[Ed will summarize the agreed architecture in his own words here]
+
+---
