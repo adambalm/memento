@@ -188,7 +188,7 @@ function parseLLMResponse(responseText, tabs, engineInfo, debugMode = false) {
 
   // Log assignment count for debugging
   const assignmentCount = Object.keys(rawAssignments).length;
-  console.log(`[Parser] Got ${assignmentCount}/${tabs.length} assignments from LLM`);
+  console.error(`[Parser] Got ${assignmentCount}/${tabs.length} assignments from LLM`);
 
   // Build groups and reasoning from assignments
   const groups = {};
@@ -714,7 +714,7 @@ CRITICAL:
 async function analyzeThematicRelationships(result, tabs, context, engine, debugMode = false) {
   // Only run if there are active projects
   if (!context || !context.activeProjects || context.activeProjects.length === 0) {
-    console.log('[Pass 4] Skipped - no active projects in context');
+    console.error('[Pass 4] Skipped - no active projects in context');
     return null;
   }
 
@@ -798,7 +798,7 @@ async function classifyWithLLM(tabs, engine = DEFAULT_ENGINE, context = null, de
 
   // Log context usage
   if (context && context.activeProjects) {
-    console.log(`[Context] Using ${context.activeProjects.length} active project(s) for classification`);
+    console.error(`[Context] Using ${context.activeProjects.length} active project(s) for classification`);
 
     // Capture context used in trace
     if (debugMode) {
@@ -811,7 +811,7 @@ async function classifyWithLLM(tabs, engine = DEFAULT_ENGINE, context = null, de
   }
 
   // === PASS 1: Classification + Triage ===
-  console.log(`[Pass 1] Calling LLM via ${engineInfo.engine} (${engineInfo.model})...`);
+  console.error(`[Pass 1] Calling LLM via ${engineInfo.engine} (${engineInfo.model})...`);
   const pass1Start = Date.now();
   const prompt = buildPrompt(tabs, context);
 
@@ -824,7 +824,7 @@ async function classifyWithLLM(tabs, engine = DEFAULT_ENGINE, context = null, de
   const pass1Duration = Date.now() - pass1Start;
   const responseText = pass1Response.text;
   const pass1Usage = pass1Response.usage;
-  console.log('[Pass 1] Response received, parsing...');
+  console.error('[Pass 1] Response received, parsing...');
 
   // Capture raw response in trace
   if (debugMode) {
@@ -842,7 +842,7 @@ async function classifyWithLLM(tabs, engine = DEFAULT_ENGINE, context = null, de
   // === PASS 2: Deep Dive (Conditional) ===
   const pass2Start = Date.now();
   if (result.deepDive && result.deepDive.length > 0) {
-    console.log(`[Pass 2] ${result.deepDive.length} tab(s) flagged for deep dive`);
+    console.error(`[Pass 2] ${result.deepDive.length} tab(s) flagged for deep dive`);
 
     const deepDiveResults = [];
     for (const dive of result.deepDive) {
@@ -850,7 +850,7 @@ async function classifyWithLLM(tabs, engine = DEFAULT_ENGINE, context = null, de
       const tabIdx = dive.tabIndex - 1;
       if (tabIdx >= 0 && tabIdx < tabs.length) {
         const tab = tabs[tabIdx];
-        console.log(`[Pass 2] Analyzing: ${tab.title || tab.url}`);
+        console.error(`[Pass 2] Analyzing: ${tab.title || tab.url}`);
         const diveResult = await runDeepDive(tab, dive.extractHints, engine, debugMode);
         deepDiveResults.push(diveResult);
 
@@ -873,15 +873,15 @@ async function classifyWithLLM(tabs, engine = DEFAULT_ENGINE, context = null, de
     result.meta.passes = 2;
     result.meta.timing = result.meta.timing || {};
     result.meta.timing.pass2 = Date.now() - pass2Start;
-    console.log(`[Pass 2] Complete. ${deepDiveResults.length} deep dive(s) processed in ${result.meta.timing.pass2}ms`);
+    console.error(`[Pass 2] Complete. ${deepDiveResults.length} deep dive(s) processed in ${result.meta.timing.pass2}ms`);
   } else {
-    console.log('[Pass 1] No tabs flagged for deep dive');
+    console.error('[Pass 1] No tabs flagged for deep dive');
     result.deepDiveResults = [];
     result.meta.timing = { pass1: pass1Duration, pass2: 0 };
   }
 
   // === PASS 3: Visualization ===
-  console.log('[Pass 3] Generating session visualization...');
+  console.error('[Pass 3] Generating session visualization...');
   const pass3Start = Date.now();
   const vizResult = await generateVisualization(result, result.deepDiveResults, engine, debugMode);
   const pass3Duration = Date.now() - pass3Start;
@@ -904,7 +904,7 @@ async function classifyWithLLM(tabs, engine = DEFAULT_ENGINE, context = null, de
       result.meta.timing.pass1 = pass1Duration;
       result.meta.timing.pass3 = pass3Duration;
       result.meta.timing.total = pass1Duration + (result.meta.timing.pass2 || 0) + pass3Duration;
-      console.log(`[Timing] Pass1: ${pass1Duration}ms, Pass2: ${result.meta.timing.pass2 || 0}ms, Pass3: ${pass3Duration}ms, Total: ${result.meta.timing.total}ms`);
+      console.error(`[Timing] Pass1: ${pass1Duration}ms, Pass2: ${result.meta.timing.pass2 || 0}ms, Pass3: ${pass3Duration}ms, Total: ${result.meta.timing.total}ms`);
       if (pass1Usage) {
         result.meta.usage = {
           pass1: pass1Usage,
@@ -921,7 +921,7 @@ async function classifyWithLLM(tabs, engine = DEFAULT_ENGINE, context = null, de
           currency: 'USD'
         };
       }
-    console.log('[Pass 3] Visualization generated successfully');
+    console.error('[Pass 3] Visualization generated successfully');
   } else {
     result.visualization = {
       mermaid: null,
@@ -932,7 +932,7 @@ async function classifyWithLLM(tabs, engine = DEFAULT_ENGINE, context = null, de
 
   // === PASS 4: Thematic Analysis (Conditional) ===
   const pass4Start = Date.now();
-  console.log('[Pass 4] Analyzing thematic relationships...');
+  console.error('[Pass 4] Analyzing thematic relationships...');
   const thematicResult = await analyzeThematicRelationships(result, tabs, context, engine, debugMode);
   const pass4Duration = Date.now() - pass4Start;
 
@@ -941,8 +941,8 @@ async function classifyWithLLM(tabs, engine = DEFAULT_ENGINE, context = null, de
     result.meta.passes = 4;
     result.meta.timing.pass4 = pass4Duration;
     result.meta.timing.total = pass1Duration + (result.meta.timing.pass2 || 0) + pass3Duration + pass4Duration;
-    console.log(`[Pass 4] Complete. ${thematicResult.suggestedActions?.length || 0} action(s) suggested in ${pass4Duration}ms`);
-    console.log(`[Timing] Pass1: ${pass1Duration}ms, Pass2: ${result.meta.timing.pass2 || 0}ms, Pass3: ${pass3Duration}ms, Pass4: ${pass4Duration}ms, Total: ${result.meta.timing.total}ms`);
+    console.error(`[Pass 4] Complete. ${thematicResult.suggestedActions?.length || 0} action(s) suggested in ${pass4Duration}ms`);
+    console.error(`[Timing] Pass1: ${pass1Duration}ms, Pass2: ${result.meta.timing.pass2 || 0}ms, Pass3: ${pass3Duration}ms, Pass4: ${pass4Duration}ms, Total: ${result.meta.timing.total}ms`);
 
     // Capture Pass 4 trace
     if (debugMode && thematicResult.trace) {
@@ -953,7 +953,7 @@ async function classifyWithLLM(tabs, engine = DEFAULT_ENGINE, context = null, de
     }
   } else {
     result.thematicAnalysis = null;
-    console.log('[Pass 4] Skipped - no thematic analysis performed');
+    console.error('[Pass 4] Skipped - no thematic analysis performed');
   }
 
   // === Debug Mode: Compute per-tab attribution and attach trace ===
@@ -969,7 +969,7 @@ async function classifyWithLLM(tabs, engine = DEFAULT_ENGINE, context = null, de
 
     // Attach trace to result
     result.trace = trace;
-    console.log('[Debug] Trace captured with per-tab attribution');
+    console.error('[Debug] Trace captured with per-tab attribution');
   }
 
   return result;
@@ -1146,12 +1146,12 @@ async function classifyWithMock(tabs) {
 async function classifyTabs(tabs, engine = DEFAULT_ENGINE, context = null, debugMode = false) {
   try {
     const result = await classifyWithLLM(tabs, engine, context, debugMode);
-    console.log(`Classification completed via ${engine}${debugMode ? ' (debug mode)' : ''}`);
+    console.error(`Classification completed via ${engine}${debugMode ? ' (debug mode)' : ''}`);
     return result;
   } catch (error) {
     console.warn(`LLM failed: ${error.message}. Falling back to mock classifier.`);
     const result = await classifyWithMock(tabs);
-    console.log('Classification completed via mock fallback');
+    console.error('Classification completed via mock fallback');
     return result;
   }
 }

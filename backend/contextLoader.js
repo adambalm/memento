@@ -54,11 +54,11 @@ function loadContext() {
 
     // Check staleness
     if (isStale(context.generated)) {
-      console.log('[Context] Context file is stale (>24h), ignoring');
+      console.error('[Context] Context file is stale (>24h), ignoring');
       return null;
     }
 
-    console.log(`[Context] Loaded ${context.activeProjects.length} active project(s) from context.json`);
+    console.error(`[Context] Loaded ${context.activeProjects.length} active project(s) from context.json`);
     return context;
   } catch (error) {
     // File doesn't exist or is invalid - this is fine
@@ -102,7 +102,7 @@ async function saveContext(data) {
   };
 
   await fs.promises.writeFile(CONTEXT_PATH, JSON.stringify(contextData, null, 2));
-  console.log(`[Context] Saved ${activeProjects.length} active project(s) to context.json`);
+  console.error(`[Context] Saved ${activeProjects.length} active project(s) to context.json`);
 
   return contextData;
 }

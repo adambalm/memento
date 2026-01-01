@@ -18,7 +18,7 @@ async function saveSession(data) {
     const filename = getSessionFilename();
     const filepath = path.join(MEMORY_DIR, filename);
     await fs.writeFile(filepath, JSON.stringify(data, null, 2));
-    console.log(`Session saved: ${filename}`);
+    console.error(`Session saved: ${filename}`);
   } catch (error) {
     console.error('Failed to save session:', error.message);
     // Non-fatal: don't throw

@@ -91,7 +91,7 @@ async function reclassifySession(sessionId, scope = 'pass4', engine = DEFAULT_EN
     throw new Error('No tabs found in session to reclassify');
   }
 
-  console.log(`[Reclassify] Starting ${scope} reclassification of ${sessionId} with ${tabs.length} tabs`);
+  console.error(`[Reclassify] Starting ${scope} reclassification of ${sessionId} with ${tabs.length} tabs`);
 
   // 5. Run classification based on scope
   let newAnalysis;
@@ -114,7 +114,7 @@ async function reclassifySession(sessionId, scope = 'pass4', engine = DEFAULT_EN
   } else if (scope === 'full') {
     // Full re-classification - all 4 passes
     // Note: Content is not available for re-classification, only URL/title
-    console.log('[Reclassify] Running full 4-pass reclassification (note: content not available)');
+    console.error('[Reclassify] Running full 4-pass reclassification (note: content not available)');
     newAnalysis = await classifyWithLLM(tabs, engine, context, false);
   } else {
     throw new Error(`Invalid scope: ${scope}. Must be 'pass4' or 'full'.`);
@@ -151,7 +151,7 @@ async function reclassifySession(sessionId, scope = 'pass4', engine = DEFAULT_EN
   const artifactPath = path.join(RECLASSIFICATIONS_DIR, artifactFilename);
   await fs.writeFile(artifactPath, JSON.stringify(artifact, null, 2));
 
-  console.log(`[Reclassify] Created artifact: ${artifactFilename}`);
+  console.error(`[Reclassify] Created artifact: ${artifactFilename}`);
 
   return {
     success: true,
