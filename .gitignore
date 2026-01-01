@@ -1,5 +1,6 @@
 node_modules/
-memory/sessions/
+memory/sessions/*.json
+!memory/sessions/example-session.schema.json
 .claude/
 backend/evals/
 .env

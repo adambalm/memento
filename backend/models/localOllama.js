@@ -3,7 +3,7 @@
  */
 
 const CONFIG = {
-  endpoint: process.env.OLLAMA_ENDPOINT || 'http://adambalm:11434/api/generate',
+  endpoint: process.env.OLLAMA_ENDPOINT || 'http://localhost:11434/api/generate',
   model: 'qwen3',  // Hardcoded for testing - TODO: restore env override after validation
   timeout: 180000,  // 3 minutes for exhaustive classification
   maxRetries: 2,
