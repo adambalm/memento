@@ -1156,4 +1156,9 @@ async function classifyTabs(tabs, engine = DEFAULT_ENGINE, context = null, debug
   }
 }
 
-module.exports = { classifyTabs };
+module.exports = {
+  classifyTabs,
+  classifyWithLLM,  // Exported for re-classification (full)
+  analyzeThematicRelationships,  // Exported for re-classification (pass4)
+  DEFAULT_ENGINE
+};

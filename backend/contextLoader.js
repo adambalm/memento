@@ -77,4 +77,34 @@ function getContextPath() {
   return CONTEXT_PATH;
 }
 
-module.exports = { loadContext, getContextPath, isStale };
+/**
+ * Save context to ~/.memento/context.json
+ * @param {Object} data - Object with activeProjects array or {activeProjects: [...]}
+ * @returns {Promise<Object>} The saved context object
+ */
+async function saveContext(data) {
+  const contextDir = path.dirname(CONTEXT_PATH);
+
+  // Ensure directory exists
+  await fs.promises.mkdir(contextDir, { recursive: true });
+
+  // Normalize input - accept either {activeProjects: [...]} or just [...]
+  const activeProjects = Array.isArray(data) ? data : (data.activeProjects || []);
+
+  const contextData = {
+    version: '1.0.0',
+    generated: new Date().toISOString(),
+    activeProjects: activeProjects.map(p => ({
+      name: p.name,
+      keywords: p.keywords || [],
+      categoryType: p.categoryType || 'Project'
+    }))
+  };
+
+  await fs.promises.writeFile(CONTEXT_PATH, JSON.stringify(contextData, null, 2));
+  console.log(`[Context] Saved ${activeProjects.length} active project(s) to context.json`);
+
+  return contextData;
+}
+
+module.exports = { loadContext, getContextPath, isStale, saveContext };
