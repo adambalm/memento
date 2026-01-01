@@ -5,7 +5,7 @@
 **Protocol:** Lanesborough Protocol
 **Pattern:** Skill Forge (see Basic Memory: `patterns/skill-forge-pattern`)
 **Invoked:** 2026-01-01
-**Status:** HANDSHAKE PROPOSED - Awaiting GA acceptance and HO articulation
+**Status:** PROTOCOL COMPLETE - All gates closed, HO articulation complete
 **Max Iterations:** 5
 **Transport:** Manual (HO copies log to ChatGPT, pastes response back)
 
@@ -795,8 +795,211 @@ If HO can restate what was decided without contradiction, the Skill Forge protoc
 ---
 
 ## HO Articulation
-**Status:** Awaiting Ed's articulation
+**Status:** COMPLETE
+**Timestamp:** 2026-01-01T12:00:00Z
+**Author:** Ed O'Connell
 
-[Ed will summarize the agreed architecture in his own words here]
+### The Articulation Journey
+
+The HO required three clarifications before reaching qualified understanding. This journey is documented per Skill Forge requirements.
+
+**Clarification 1: How does Memento get context if it's ignorant of Basic Memory?**
+
+*HO's initial question:*
+> "If memento is ignorant of basic memory, how does it gain the necessary context to do enhanced classification?"
+
+*Resolution:* Claude Desktop (as MCP client) queries Basic Memory for projects, then pushes that data to Memento via `set_active_projects()`. Memento is a passive recipient — it receives context, it doesn't fetch it.
+
+**Clarification 2: Is `set_active_projects()` a JavaScript function?**
+
+*HO's understanding:*
+> "set_active_project() function, which is I assume a javascript or typescript function?"
+
+*Resolution:* It's an MCP tool, not a direct function call. Claude Desktop sends a JSON-RPC message over the MCP protocol. Memento's MCP server receives it and handles it internally with a JavaScript handler function.
+
+**Clarification 3: Who is client, who is server?**
+
+*HO's request:*
+> "explain very clearly who is the client and who is the server in all of this"
+
+*Resolution:*
+- **Claude Desktop = CLIENT** — initiates all requests, orchestrates
+- **Basic Memory = SERVER** — waits for requests, responds with knowledge
+- **Memento = SERVER** — waits for requests, responds with session data
+- Servers never call each other — only the client talks to servers
+
+### Final HO Articulation
+
+> Claude Desktop, as the MCP **client**, queries Basic Memory (MCP **server**) using `search_notes` to retrieve active projects. Basic Memory returns the project list to Claude Desktop. Claude Desktop then pushes this data to Memento (another MCP **server**) by calling `set_active_projects()`. Memento writes this to `context.json`, which it uses during classification (Pass 4 thematic analysis).
+>
+> **Key constraint:** Memento never queries Basic Memory directly. Claude Desktop is the sole orchestrator — the only entity that sees both servers.
+
+### HO Certification
+
+I certify the following claims that IA flagged as `[cannot verify]`:
+1. Claude Desktop can orchestrate between MCP servers — **[certified by HO, 2026-01-01]**
+2. Claude Desktop has access to Basic Memory MCP — **[certified by HO, 2026-01-01]**
+
+---
+
+## PROTOCOL COMPLETE
+
+**Skill Forge Status:** SUCCESS
+
+| Gate | Status |
+|------|--------|
+| Understanding Gate | CLOSED |
+| Agreement Gate | CLOSED |
+| HO Articulation | COMPLETE |
+| All claims | Resolved or certified |
+
+This dialogue may now be compiled into a reusable skill.
+
+---
+
+# Appendix: MCP Architecture Reference
+
+*This appendix preserves the architectural diagrams created during HO clarification for future reference.*
+
+## Diagram 1: MCP Client-Server Architecture
+
+```
+                         ┌─────────────────────────────────┐
+                         │        CLAUDE DESKTOP           │
+                         │                                 │
+                         │         (MCP CLIENT)            │
+                         │                                 │
+                         │   • Initiates all requests      │
+                         │   • Connects to multiple servers│
+                         │   • Decides when to call tools  │
+                         └───────────┬─────────────────────┘
+                                     │
+                    ┌────────────────┼────────────────┐
+                    │                │                │
+                    ▼                ▼                ▼
+         ┌──────────────────┐ ┌──────────────┐ ┌──────────────┐
+         │  Basic Memory    │ │   Memento    │ │  (Future)    │
+         │   MCP SERVER     │ │  MCP SERVER  │ │  Other MCPs  │
+         │                  │ │              │ │              │
+         │ • Waits for calls│ │ • Waits for  │ │              │
+         │ • Responds       │ │   calls      │ │              │
+         │ • Exposes tools: │ │ • Responds   │ │              │
+         │   - search_notes │ │ • Exposes:   │ │              │
+         │   - write_note   │ │  - list_     │ │              │
+         │   - read_note    │ │    sessions  │ │              │
+         │   - etc.         │ │  - set_      │ │              │
+         │                  │ │    active_   │ │              │
+         │  (Python app)    │ │    projects  │ │              │
+         │                  │ │  - etc.      │ │              │
+         │                  │ │              │ │              │
+         │                  │ │ (Node.js app)│ │              │
+         └──────────────────┘ └──────────────┘ └──────────────┘
+```
+
+## Diagram 2: Context Flow (The Orchestrator Pattern)
+
+```
+      ┌─────────────────────────────────────────────────────────┐
+      │                    CLAUDE DESKTOP                       │
+      │                     (MCP CLIENT)                        │
+      │                                                         │
+      │  User: "Update Memento context from my projects"        │
+      │                                                         │
+      │  Claude Desktop thinks:                                 │
+      │  1. I'll query Basic Memory for projects                │
+      │  2. I'll push that data to Memento                      │
+      │                                                         │
+      └──────────────┬─────────────────────────┬────────────────┘
+                     │                         │
+         Step 1:     │                         │  Step 2:
+         Query       │                         │  Push
+                     ▼                         ▼
+      ┌──────────────────────┐    ┌──────────────────────┐
+      │   Basic Memory       │    │      Memento         │
+      │   (MCP SERVER)       │    │   (MCP SERVER)       │
+      │                      │    │                      │
+      │  Tool called:        │    │  Tool called:        │
+      │  search_notes(       │    │  set_active_projects(│
+      │    "project"         │    │    [{name: "PREY",   │
+      │  )                   │    │      keywords:...}]  │
+      │         │            │    │  )                   │
+      │         ▼            │    │         │            │
+      │  Returns project     │    │         ▼            │
+      │  list to client      │    │  Writes context.json │
+      │                      │    │  Returns success     │
+      └──────────────────────┘    └──────────────────────┘
+```
+
+## Diagram 3: MCP Protocol Flow
+
+```
+CLIENT (Claude Desktop)          SERVER (any MCP server)
+        │                                  │
+        │  1. Connect (on startup)         │
+        ├─────────────────────────────────▶│
+        │                                  │
+        │  2. "What tools do you have?"    │
+        ├─────────────────────────────────▶│
+        │                                  │
+        │  3. Tool list response           │
+        │◀─────────────────────────────────┤
+        │                                  │
+        │  4. "Call tool X with params Y"  │
+        ├─────────────────────────────────▶│
+        │                                  │
+        │  5. Tool result                  │
+        │◀─────────────────────────────────┤
+        │                                  │
+```
+
+## Diagram 4: Complete Data Flow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     CLAUDE DESKTOP                          │
+│                   (sole orchestrator)                       │
+│                                                             │
+│  User: "Update my Memento context from my projects"         │
+│                          │                                  │
+│         ┌────────────────┴────────────────┐                 │
+│         ▼                                 ▼                 │
+│  ┌─────────────────┐              ┌─────────────────┐       │
+│  │  Basic Memory   │              │    Memento      │       │
+│  │      MCP        │              │      MCP        │       │
+│  │                 │              │                 │       │
+│  │ search_notes()  │              │ set_active_     │       │
+│  │ read_note()     │──projects───▶│ projects([...]) │       │
+│  │                 │    data      │                 │       │
+│  └─────────────────┘              └────────┬────────┘       │
+│                                            │                │
+└────────────────────────────────────────────┼────────────────┘
+                                             ▼
+                                    ┌─────────────────┐
+                                    │  context.json   │
+                                    │  (local file)   │
+                                    └────────┬────────┘
+                                             │
+                                             ▼
+                                    ┌─────────────────┐
+                                    │  Classification │
+                                    │  (Pass 1-4)     │
+                                    └─────────────────┘
+```
+
+## Key Relationships Summary
+
+| Role | Who | Does What |
+|------|-----|-----------|
+| **CLIENT** | Claude Desktop | Initiates connections, calls tools, orchestrates |
+| **SERVER** | Basic Memory | Waits for requests, responds with knowledge data |
+| **SERVER** | Memento | Waits for requests, responds with session data |
+
+## Boundary Discipline
+
+- **Memento MCP** = sessions + classification mechanics ONLY
+- **Basic Memory MCP** = projects + long-term knowledge
+- **Claude Desktop** = sole orchestrator between both
+- Servers NEVER call each other
+- Servers NEVER call the client
 
 ---
