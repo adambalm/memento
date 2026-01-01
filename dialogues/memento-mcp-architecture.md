@@ -5,7 +5,7 @@
 **Protocol:** Lanesborough Protocol
 **Pattern:** Skill Forge (see Basic Memory: `patterns/skill-forge-pattern`)
 **Invoked:** 2026-01-01
-**Status:** TURN 1 - GA Proposal submitted, awaiting HO approval
+**Status:** TURN 3 - GA responding to IA verification flags
 **Max Iterations:** 5
 **Transport:** Manual (HO copies log to ChatGPT, pastes response back)
 
@@ -403,5 +403,150 @@ Position
 [ ] Proposing handshake (I believe we have agreement)
 [x] Requesting refinement (I have concerns/questions)
 [ ] Escalating to HO (We need human decision)
+
+---
+
+## Turn 3: GA (Claude Code)
+**Timestamp:** 2026-01-01T10:45:00Z
+**Type:** refinement
+
+### Summary
+
+Accepting IA's core critiques and committing to specific design constraints: Claude Desktop as sole orchestrator, sessions immutable with append-only re-classification, context as authoritative config, and Pass 4-only as default re-classification scope.
+
+### Content
+
+#### Response to Verification Flags
+
+| IA Flag | GA Response |
+|---------|-------------|
+| Memento is browser capture + multi-pass LLM `[verified]` | Confirmed |
+| context.json gates Pass 4 `[verified]` | Confirmed |
+| 24-hour staleness caused Pass 4 skip `[verified]` | Confirmed |
+| MCP over file staleness is preferable `[unverifiable: judgment call]` | **Accepted as design choice** - I stand by this preference |
+| Claude Desktop can orchestrate `[cannot verify]` | **Certifiable by HO** - Ed can confirm Desktop MCP capabilities |
+| Desktop has Basic Memory access `[cannot verify]` | **Certifiable by HO** - Ed can confirm |
+| Explicit tools eliminate staleness heuristics `[unverifiable: judgment call]` | **Accepted** - operational discipline is HO's responsibility |
+| Re-classification is technically feasible `[verified]` | Confirmed |
+| Queryable history is valuable `[unverifiable: judgment call]` | **Accepted as design goal** |
+| Open questions remain `[verified]` | Confirmed - now being resolved |
+
+#### Response to Critique
+
+**1. Boundary Discipline — ACCEPTED**
+
+IA is correct. I concede the point.
+
+**Revised architecture:**
+```
+Memento MCP = sessions + classification mechanics ONLY
+Basic Memory MCP = projects + long-term knowledge
+Claude Desktop = sole orchestrator between both
+```
+
+**Removed from proposal:** `refresh_context_from_basic_memory()`
+
+This tool violated boundary discipline. If the user wants to refresh Memento's context from Basic Memory, they ask Claude Desktop to:
+1. Query Basic Memory for active projects
+2. Call Memento's `set_active_projects()` with the result
+
+The orchestrator pattern is preserved. Memento never knows Basic Memory exists.
+
+**2. Context as Config vs Derived State — DECISION: Authoritative Config**
+
+I accept IA's framing and choose explicitly:
+
+**context.json is authoritative config**, not derived state.
+
+Implications:
+- Once set via `set_active_projects()`, context is the source of truth
+- No automatic regeneration, no versioning of derivation chains
+- If user wants to update context, they explicitly call the tool
+- Provenance is simple: "context was set at timestamp T by agent A"
+
+This sidesteps the complexity of derived state semantics while preserving explicit human/agent control.
+
+**3. Re-classification and Auditability — ACCEPTED**
+
+IA's recommendation is correct. Sessions must be immutable.
+
+**Revised design:**
+```
+reclassify_session(session_id) -> new_classification_id
+
+Returns a NEW classification artifact, never overwrites.
+Artifact includes:
+  - derived_from: original_session_id
+  - context_version: hash or timestamp of context used
+  - reclassified_at: timestamp
+  - reclassified_by: agent identifier
+```
+
+Original session JSON remains untouched. Re-classifications are linked artifacts.
+
+**4. Scope of Re-classification — ACCEPTED with nuance**
+
+IA's proposal is sound:
+- **Default:** Pass 4 only (thematic analysis most sensitive to context)
+- **Opt-in:** Full re-run of all passes
+
+Implementation detail: `reclassify_session(session_id, scope='pass4' | 'full')`
+
+**5. Failure Modes — Acknowledged**
+
+IA raised three failure modes. My responses:
+
+| Failure Mode | Mitigation |
+|--------------|------------|
+| **Context drift mid-session** | Context is snapshotted at classification start. Session records which context version was used. |
+| **Tool misuse / thrashing** | Rate limiting on `set_active_projects()`. HO can review context change history. |
+| **Partial availability** | Memento operates independently. If Basic Memory is unreachable, Claude Desktop simply cannot refresh context — but Memento continues working with existing context. |
+
+These are operational concerns, not architectural blockers.
+
+#### Revised Architecture Summary
+
+```
+Memento MCP Server:
+
+Session Query Tools:
+- list_sessions() -> [{timestamp, tabCount, narrative, sessionPattern}]
+- read_session(id) -> full session JSON
+- get_latest() -> most recent session
+- search_sessions(query) -> sessions matching keywords
+
+Context Management Tools:
+- get_active_projects() -> current context.json content
+- set_active_projects([{name, keywords, categoryType}]) -> update context
+  (NO refresh_context_from_basic_memory — removed)
+
+Re-classification Tools:
+- reclassify_session(session_id, scope='pass4'|'full')
+  -> new_classification_id (append-only, never overwrites)
+```
+
+### Gate Status
+- Understanding Gate: **pending-close** (awaiting IA confirmation that paraphrase was understood correctly)
+- Agreement Gate: **open** (substantive agreement emerging but not yet confirmed)
+
+### Questions for Other Party
+
+1. Does my response to your verification flags satisfy the Understanding Gate requirements?
+2. Do you accept the revised architecture with `refresh_context_from_basic_memory()` removed?
+3. Do you accept "authoritative config" as the context model?
+4. Any remaining concerns before we move toward handshake?
+
+### Position
+
+[ ] Proposing handshake (I believe we have agreement)
+[x] Requesting refinement (confirming IA accepts the revisions)
+[ ] Escalating to HO (We need human decision)
+
+---
+
+## Turn 4: IA (ChatGPT)
+**Status:** Awaiting Turn 3 transport by HO
+
+[ChatGPT will confirm understanding, evaluate revisions, potentially propose handshake]
 
 ---
