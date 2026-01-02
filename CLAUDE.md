@@ -17,51 +17,108 @@ Memento is a browser session capture and classification system with two main com
 
 ### Chrome Extension (`extension/`)
 - Manifest V3 extension with popup UI
-- Gathers open tabs (URL, title, first 2000 chars of page content via `chrome.scripting.executeScript`)
-- Sends JSON payload to backend, opens results page
-- Timeouts: 1s per tab extraction, 65s for LLM classification, 70s global
+- Gathers open tabs (URL, title, first 8000 chars of page content via `chrome.scripting.executeScript`)
+- Two output modes: **Results** (passive viewing) and **Launchpad** (forced-completion)
+- Sends JSON payload to backend, opens results or launchpad page
+- Timeouts: 2s per tab extraction, 240s for LLM classification, 300s global
 
 ### Express Backend (`backend/`)
-- `server.js` - HTTP endpoints, calls classifier, saves to memory
+
+**Core files:**
+- `server.js` - HTTP endpoints for classification, results, and launchpad routes
 - `classifier.js` - Orchestrates LLM classification with mock fallback; contains prompt template and response parsing
 - `models/index.js` - Model dispatch layer: `runModel(engine, prompt)` and `getEngineInfo(engine)`
 - `models/localOllama.js` - Ollama driver with retry logic and timeout
 - `memory.js` - Saves session JSON to `memory/sessions/YYYY-MM-DDTHH-MM-SS.json`
 - `renderer.js` - Generates HTML results page
 
+**Nuclear Option / Launchpad mode:**
+- `launchpad.js` - Renders Launchpad UI for forced-completion workflow
+- `lockManager.js` - Session lock at `~/.memento/lock.json`; blocks new Launchpad captures until resolved
+- `dispositions.js` - Append-only action tracking (trash, complete, promote, regroup, reprioritize)
+
+**Supporting files:**
+- `contextLoader.js` - Loads user context from `memento-context.json`
+- `pdfExtractor.js` - Playwright-based visual extraction for PDFs
+- `mcp-server.js` - MCP server for Claude Desktop integration
+
 ### Data Flow
+
+**Results mode (passive):**
+```
+Extension popup → POST /classifyAndRender → classifier.js
+    → runModel() → Ollama API (or mock fallback)
+    → saveSession() → memory/sessions/*.json
+    → HTML response → Extension opens blob URL
+```
+
+**Launchpad mode (forced-completion):**
 ```
 Extension popup → POST /classifyBrowserContext → classifier.js
-    → runModel('ollama-local', prompt) → Ollama API (or mock fallback)
     → saveSession() → memory/sessions/*.json
-    → JSON response → Extension opens /results page
+    → POST /api/acquire-lock → lockManager.js
+    → Extension opens /launchpad/:sessionId
+    → User actions → POST /api/launchpad/:sessionId/disposition
+    → All resolved → POST /api/launchpad/:sessionId/clear-lock
 ```
 
 ### Configuration
+
 Environment variables (with defaults):
 - `OLLAMA_ENDPOINT` - `http://adambalm:11434/api/generate`
 - `OLLAMA_MODEL` - `qwen2.5-coder`
 
 To switch LLM engines, modify `DEFAULT_ENGINE` in `classifier.js`. Stubs exist for `anthropic` and `openai` in `models/index.js`.
 
-### Session Schema (v1.0.0)
-Output includes `meta` block with `schemaVersion`, `engine`, `model`, `endpoint` for provenance tracking.
+### Session Schema (v1.3.0)
+
+Output includes:
+- `meta` block with `schemaVersion`, `engine`, `model`, `endpoint` for provenance tracking
+- `dispositions` array (empty at creation, append-only thereafter)
+- `groups` as object format: `{ "Category": [items...] }`
+
+See: `docs/SESSION-ARTIFACT-INVARIANTS.md` for disposition semantics and immutability guarantees.
+
+### Special Categories
+
+- **Financial (Protected)** - Banking, payments, tax. No Trash button in Launchpad UI.
+- **Academic (Synthesis)** - arxiv, journals, research. Shows "Synthesize" button for note consolidation.
+
+## MCP Integration
+
+`backend/mcp-server.js` provides tools for Claude Desktop:
+- `list_sessions`, `read_session`, `get_latest_session`, `search_sessions`
+- `get_context`, `set_context` - manage user project context
+- `reclassify_session` - re-run classification with different engine
+- `get_lock_status`, `clear_lock` - session lock management
+
+Run with: `node backend/mcp-server.js` (stdio transport)
 
 ## Known Issues
 
 ### Tab Capture Incomplete (2025-12-20)
-**Status:** Investigating
+**Status:** Diagnostic logging added, root cause unconfirmed
 
-**Symptom:** Extension reports capturing N tabs, but visible browser tabs are not all present in the session JSON. User had ~15+ tabs visible but only 10 were captured.
+**Symptom:** Extension reports capturing N tabs, but visible browser tabs are not all present in the session JSON.
 
-**Possible causes (not yet confirmed):**
-1. **Chrome Tab Groups** — `chrome.tabs.query({})` may not enumerate collapsed/grouped tabs correctly
-2. **Chrome Profiles** — Extension only sees tabs from its own profile; tabs in other profiles are invisible
-3. **Window isolation** — Tabs in other windows may not be captured
-4. **Silent failures** — Content extraction errors may cause tabs to be skipped (check `catch` block in `gatherTabData`)
+**Diagnostic logging added** (popup.js lines 143-211):
+- Raw tab count from `chrome.tabs.query({})` logged to console
+- Per-tab decisions logged (CAPTURED, SKIP chrome://, SKIP extension://, ERROR)
+- Summary shows raw vs final count
 
-**To investigate:**
-- Add logging to show raw tab count from `chrome.tabs.query({})` vs final `tabData.length`
-- Test with tab groups expanded vs collapsed
-- Test with single vs multiple windows
-- Verify extension is installed in correct profile
+**Possible causes:**
+1. **Chrome Profiles** — Extension only sees tabs from its own profile
+2. **Window isolation** — May need explicit `windowId` handling
+3. **Tab Groups** — Collapsed groups may behave differently
+
+**To test:** Open extension popup, capture, check browser console for `[Memento]` logs.
+
+### Fixed Issues
+
+**Groups Format Mismatch (fixed 2025-01-02)**
+- Session files store groups as object `{"Category": [...]}` not array
+- Fixed in `dispositions.js` and `launchpad.js` with format detection
+
+**MCP Protocol Corruption (fixed 2025-01-01)**
+- MCP server was logging to stdout, corrupting JSON-RPC protocol
+- Fixed by routing all logs to stderr (`console.error`)
