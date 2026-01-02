@@ -58,8 +58,9 @@ function buildPrompt(tabs, context = null) {
   ).join('\n');
 
   // Base categories + any custom project categories
-  // Note: "Financial (Protected)" and "Academic (Synthesis)" are special categories with handling rules
-  const baseCategories = 'Development, Research, Shopping, Social Media, Entertainment, News, Communication, Productivity, Education, Financial (Protected), Academic (Synthesis), Health, Travel, Other';
+  // Note: "Transaction (Protected)" is context-dependent - same domain can be protected or not
+  // "Academic (Synthesis)" items should be consolidated into notes
+  const baseCategories = 'Development, Research, Shopping, Social Media, Entertainment, News, Communication, Productivity, Education, Transaction (Protected), Academic (Synthesis), Health, Travel, Other';
   const allCategories = customCategories.length > 0
     ? `${baseCategories}, ${customCategories.join(', ')}`
     : baseCategories;
@@ -95,7 +96,16 @@ CRITICAL RULES:
 8. DO NOT skip any tabs. List ALL ${tabs.length} assignments with reasoning.
 
 SPECIAL CATEGORY RULES:
-- "Financial (Protected)": Use for banking sites, payment processors, tax services, investment platforms. These are HIGH VALUE tabs that should never be accidentally trashed. Signals: bank URLs, payment/checkout flows, tax prep, investment dashboards.
+- "Transaction (Protected)": Use ONLY for active transactional/account management contexts. These are HIGH VALUE tabs that should never be accidentally trashed.
+  PROTECTED (use Transaction): logged into account dashboard, paying bills, managing settings, checkout flows, viewing balances, making transfers, tax filing in progress
+  NOT PROTECTED (use other categories): reading articles about finance, browsing product pages, viewing promotions, researching investment strategies
+  Same domain can be protected OR not:
+    - chase.com/education/credit-basics → Research (article about credit)
+    - chase.com/account/dashboard → Transaction (Protected) (logged into account)
+    - verizon.com/smartphones → Shopping (browsing products)
+    - verizon.com/account/bill-pay → Transaction (Protected) (paying bill)
+  Signals for PROTECTED: URL contains /account/, /dashboard/, /billing/, /pay/, /checkout/, /manage/, /settings/; page shows "logged in as", account numbers, balances, "pay now", order confirmation
+  Signals for NOT protected: URL is article/blog/learn/education/products; page is promotional, educational, or informational
 - "Academic (Synthesis)": Use for academic papers, arxiv PDFs, research publications, scholarly articles. These should be consolidated into notes. Signals: arxiv.org, .edu domains, PDF papers, "et al.", DOI links, journal names.
 
 Your reasoning must be AUDITABLE. A human reviewing your output should understand exactly why each tab was classified the way it was.
@@ -265,7 +275,7 @@ function parseLLMResponse(responseText, tabs, engineInfo, debugMode = false) {
     'Communication': 'Respond to messages or schedule meetings',
     'Productivity': 'Update documents or review tasks',
     'Education': 'Review course materials or complete assignments',
-    'Financial (Protected)': 'PROTECTED: Review but do not close without explicit action',
+    'Transaction (Protected)': 'PROTECTED: Active transaction - review carefully before closing',
     'Academic (Synthesis)': 'Extract key findings and add to research notes',
     'Unclassified': 'Review and organize these tabs'
   };
@@ -1023,9 +1033,11 @@ const CATEGORY_PATTERNS = {
     urlPatterns: ['.edu', 'school', 'academy', 'university', 'college', 'coursera', 'udemy'],
     keywords: ['student', 'teacher', 'class', 'course', 'learn', 'education', 'grade']
   },
-  'Financial (Protected)': {
-    urlPatterns: ['bank', 'chase.com', 'wellsfargo.com', 'bankofamerica.com', 'paypal.com', 'venmo.com', 'stripe.com', 'schwab.com', 'fidelity.com', 'vanguard.com', 'turbotax', 'irs.gov', 'tax', 'mint.com', 'plaid.com'],
-    keywords: ['banking', 'account balance', 'transfer', 'payment', 'invoice', 'tax return', 'investment', 'portfolio', '401k', 'ira', 'brokerage', 'checking', 'savings']
+  'Transaction (Protected)': {
+    // URL path patterns indicating active transaction/account management (not just domain)
+    urlPatterns: ['/account', '/dashboard', '/billing', '/pay', '/checkout', '/manage', '/settings', '/order', '/transfer', '/bill-pay', '/my-account', '/secure', '/online-banking'],
+    // Content keywords indicating transactional context (not just financial topics)
+    keywords: ['logged in as', 'your account', 'account balance', 'pay now', 'complete purchase', 'order confirmation', 'order total', 'your order', 'payment method', 'billing address', 'shipping address', 'confirm order', 'place order', 'sign out', 'log out', 'my account', 'account settings', 'view statement', 'recent transactions']
   },
   'Academic (Synthesis)': {
     urlPatterns: ['arxiv.org', 'scholar.google', 'pubmed', 'researchgate.net', 'semanticscholar.org', 'jstor.org', 'springer.com', 'wiley.com', 'acm.org', 'ieee.org', 'nature.com', 'science.org', 'doi.org'],

@@ -435,7 +435,8 @@ function renderCategorySection(category, items) {
   const pendingCount = items.filter(i => i.state.status === 'pending').length;
 
   // Determine special category classes
-  const isProtected = category.toLowerCase().includes('protected') || category.toLowerCase().includes('financial');
+  // Protected categories have (Protected) suffix - these get no Trash button
+  const isProtected = category.toLowerCase().includes('protected');
   const isSynthesis = category.toLowerCase().includes('synthesis') || category.toLowerCase().includes('academic');
   const categoryClass = isProtected ? 'protected' : (isSynthesis ? 'synthesis' : '');
 
