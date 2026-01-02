@@ -42,11 +42,17 @@ app.post('/classifyBrowserContext', async (req, res) => {
     // Call LLM classifier with specified engine, context, and debugMode
     const classification = await classifyTabs(processedTabs, engine, context, debugMode);
 
-    // Save to memory
-    await saveSession(classification);
+    // Save to memory and get session ID
+    const sessionId = await saveSession(classification);
 
-    // Return JSON response
-    res.json(classification);
+    // Return JSON response with session ID
+    res.json({
+      ...classification,
+      meta: {
+        ...classification.meta,
+        sessionId
+      }
+    });
   } catch (error) {
     console.error('Classification error:', error);
     res.status(500).json({ error: 'Classification failed' });
