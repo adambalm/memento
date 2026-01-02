@@ -4,16 +4,30 @@ const captureBtn = document.getElementById('captureBtn');
 const statusDiv = document.getElementById('status');
 const engineSelect = document.getElementById('engineSelect');
 const debugModeCheckbox = document.getElementById('debugMode');
+const modeButtons = document.querySelectorAll('.mode-btn');
+const lockWarning = document.getElementById('lockWarning');
+const lockMessage = document.getElementById('lockMessage');
+const lockLink = document.getElementById('lockLink');
 
-// Restore last selected engine and debug mode from storage
-chrome.storage.local.get(['selectedEngine', 'debugMode'], (result) => {
+let selectedMode = 'results';
+let currentLockStatus = null;
+
+// Restore settings from storage
+chrome.storage.local.get(['selectedEngine', 'debugMode', 'outputMode'], (result) => {
   if (result.selectedEngine) {
     engineSelect.value = result.selectedEngine;
   }
   if (result.debugMode) {
     debugModeCheckbox.checked = result.debugMode;
   }
+  if (result.outputMode) {
+    selectedMode = result.outputMode;
+    updateModeButtons();
+  }
 });
+
+// Check lock status on popup open
+checkLockStatus();
 
 // Save engine selection when changed
 engineSelect.addEventListener('change', () => {
@@ -24,6 +38,56 @@ engineSelect.addEventListener('change', () => {
 debugModeCheckbox.addEventListener('change', () => {
   chrome.storage.local.set({ debugMode: debugModeCheckbox.checked });
 });
+
+// Mode button handlers
+modeButtons.forEach(btn => {
+  btn.addEventListener('click', () => {
+    selectedMode = btn.dataset.mode;
+    chrome.storage.local.set({ outputMode: selectedMode });
+    updateModeButtons();
+    updateCaptureButton();
+  });
+});
+
+function updateModeButtons() {
+  modeButtons.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === selectedMode);
+  });
+}
+
+// Check lock status from backend
+async function checkLockStatus() {
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/lock-status`);
+    currentLockStatus = await response.json();
+
+    if (currentLockStatus.locked) {
+      lockMessage.textContent = `${currentLockStatus.itemsRemaining} unresolved items`;
+      lockLink.onclick = (e) => {
+        e.preventDefault();
+        chrome.tabs.create({ url: `${BACKEND_URL}/launchpad/${currentLockStatus.sessionId}` });
+      };
+      lockWarning.style.display = 'block';
+    } else {
+      lockWarning.style.display = 'none';
+    }
+
+    updateCaptureButton();
+  } catch (error) {
+    console.log('Could not check lock status:', error.message);
+    lockWarning.style.display = 'none';
+  }
+}
+
+function updateCaptureButton() {
+  if (currentLockStatus?.locked && selectedMode === 'launchpad') {
+    captureBtn.disabled = true;
+    captureBtn.textContent = 'Resolve session first';
+  } else {
+    captureBtn.disabled = false;
+    captureBtn.textContent = selectedMode === 'launchpad' ? 'Capture → Launchpad' : 'Capture Session';
+  }
+}
 
 function setStatus(message, isError = false) {
   if (isError) {
@@ -149,25 +213,65 @@ async function gatherTabData() {
   return tabData;
 }
 
-// Send data to backend for classification and get HTML back
-async function classifySession(tabs, engine, debugMode) {
-  const response = await fetch(`${BACKEND_URL}/classifyAndRender`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ tabs, engine, debugMode })
-  });
+// Send data to backend for classification
+// Returns { html, sessionId } for results mode
+// Returns { sessionId } for launchpad mode
+async function classifySession(tabs, engine, debugMode, mode) {
+  if (mode === 'launchpad') {
+    // Launchpad mode: get JSON, acquire lock, return session ID
+    const response = await fetch(`${BACKEND_URL}/classifyBrowserContext`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tabs, engine, debugMode, mode: 'launchpad' })
+    });
 
-  if (!response.ok) {
-    throw new Error(`Backend error: ${response.status}`);
+    if (!response.ok) {
+      throw new Error(`Backend error: ${response.status}`);
+    }
+
+    const classification = await response.json();
+    const sessionId = classification.meta?.sessionId || classification.timestamp?.replace(/:/g, '-').replace(/\.\d{3}Z$/, '');
+
+    // Acquire lock
+    const lockResponse = await fetch(`${BACKEND_URL}/api/acquire-lock`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId,
+        itemsRemaining: classification.totalTabs || 0
+      })
+    });
+
+    const lockResult = await lockResponse.json();
+    if (!lockResult.success) {
+      console.warn('Could not acquire lock:', lockResult.message);
+    }
+
+    return { sessionId, totalTabs: classification.totalTabs };
+  } else {
+    // Results mode: get HTML back
+    const response = await fetch(`${BACKEND_URL}/classifyAndRender`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tabs, engine, debugMode })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Backend error: ${response.status}`);
+    }
+
+    return { html: await response.text() };
   }
-
-  return response.text();
 }
 
 // Main capture flow with 5-minute global timeout (exhaustive classification needs time)
 async function captureSession() {
+  // Block if locked and in launchpad mode
+  if (currentLockStatus?.locked && selectedMode === 'launchpad') {
+    setStatus('Resolve current session first', true);
+    return;
+  }
+
   setLoading(true);
   setStatus('<span class="spinner"></span>Gathering tab data...');
 
@@ -191,31 +295,38 @@ async function captureSession() {
     const engineLabel = engineSelect.options[engineSelect.selectedIndex].text;
     const debugMode = debugModeCheckbox.checked;
     const debugLabel = debugMode ? ' (debug)' : '';
-    setStatus(`<span class="spinner"></span>Classifying ${tabs.length} tabs via ${engineLabel}${debugLabel}...`);
+    const modeLabel = selectedMode === 'launchpad' ? ' → Launchpad' : '';
+    setStatus(`<span class="spinner"></span>Classifying ${tabs.length} tabs via ${engineLabel}${debugLabel}${modeLabel}...`);
 
-    // Step 2: Send to backend and get HTML (4 min budget for exhaustive LLM classification)
-    const html = await withTimeout(classifySession(tabs, engine, debugMode), 240000, null);
+    // Step 2: Send to backend (4 min budget for exhaustive LLM classification)
+    const result = await withTimeout(classifySession(tabs, engine, debugMode, selectedMode), 240000, null);
 
     clearTimeout(timeoutId);
 
-    // Extract and log classifier source from HTML comment
-    const sourceMatch = html?.match(/<!-- MEMENTO_SOURCE:(\w+):?(.*?) -->/);
-    const classifierSource = sourceMatch ? sourceMatch[1] : 'unknown';
-    const classifierModel = sourceMatch && sourceMatch[2] ? sourceMatch[2] : null;
-    console.log(`[Memento] Classification source: ${classifierSource}${classifierModel ? ` (${classifierModel})` : ''}`);
-
-    if (!html) {
+    if (!result) {
       setStatus('Classification timed out', true);
       setLoading(false);
       return;
     }
 
-    // Step 3: Open results page via blob URL
-    const blob = new Blob([html], { type: 'text/html' });
-    const blobUrl = URL.createObjectURL(blob);
-    await chrome.tabs.create({ url: blobUrl });
+    // Step 3: Open appropriate page based on mode
+    if (selectedMode === 'launchpad') {
+      // Launchpad mode: open launchpad URL
+      await chrome.tabs.create({ url: `${BACKEND_URL}/launchpad/${result.sessionId}` });
+      setStatus(`Captured ${result.totalTabs} tabs → Launchpad`);
+    } else {
+      // Results mode: open blob URL
+      // Extract and log classifier source from HTML comment
+      const sourceMatch = result.html?.match(/<!-- MEMENTO_SOURCE:(\w+):?(.*?) -->/);
+      const classifierSource = sourceMatch ? sourceMatch[1] : 'unknown';
+      const classifierModel = sourceMatch && sourceMatch[2] ? sourceMatch[2] : null;
+      console.log(`[Memento] Classification source: ${classifierSource}${classifierModel ? ` (${classifierModel})` : ''}`);
 
-    setStatus(`Captured ${tabs.length} tabs!`);
+      const blob = new Blob([result.html], { type: 'text/html' });
+      const blobUrl = URL.createObjectURL(blob);
+      await chrome.tabs.create({ url: blobUrl });
+      setStatus(`Captured ${tabs.length} tabs!`);
+    }
   } catch (error) {
     clearTimeout(timeoutId);
     console.error('Capture error:', error);

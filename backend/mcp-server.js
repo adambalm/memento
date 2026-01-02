@@ -20,6 +20,7 @@ const { z } = require('zod');
 const { listSessions, readSession, getLatestSession, searchSessions } = require('./memory');
 const { loadContext, saveContext } = require('./contextLoader');
 const { reclassifySession } = require('./mcp/reclassify');
+const { getLockStatus, clearLock } = require('./lockManager');
 
 // Create the MCP server
 const server = new McpServer({
@@ -193,6 +194,44 @@ server.tool(
         isError: true
       };
     }
+  }
+);
+
+// === SESSION LOCK TOOLS ===
+// Part of Nuclear Option / Launchpad convergence
+// See: dialogues/Dialogue - Nuclear Option Memento Convergence.md
+
+server.tool(
+  'get_lock_status',
+  'Get current session lock status. When locked, new captures are blocked until user resolves pending items in launchpad.',
+  {},
+  async () => {
+    const status = await getLockStatus();
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify(status, null, 2)
+      }]
+    };
+  }
+);
+
+server.tool(
+  'clear_lock',
+  'Clear session lock. Requires matching session ID unless override=true (HO emergency use).',
+  {
+    session_id: z.string().describe('Session ID to clear (must match locked session)'),
+    override: z.boolean().default(false).describe('If true, clear regardless of session ID match (emergency use)')
+  },
+  async ({ session_id, override }) => {
+    const result = await clearLock(session_id, override);
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify(result, null, 2)
+      }],
+      isError: !result.success
+    };
   }
 );
 

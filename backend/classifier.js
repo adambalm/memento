@@ -6,7 +6,7 @@
 
 const { runModel, getEngineInfo } = require('./models');
 
-const SCHEMA_VERSION = '1.2.0';  // Added Pass 4: Thematic Analysis & Action Synthesis
+const SCHEMA_VERSION = '1.3.0';  // Added dispositions array for Nuclear Option mode
 const DEFAULT_ENGINE = 'ollama-local';
 
 // ============================================================
@@ -58,7 +58,8 @@ function buildPrompt(tabs, context = null) {
   ).join('\n');
 
   // Base categories + any custom project categories
-  const baseCategories = 'Development, Research, Shopping, Social Media, Entertainment, News, Communication, Productivity, Education, Finance, Health, Travel, Other';
+  // Note: "Financial (Protected)" and "Academic (Synthesis)" are special categories with handling rules
+  const baseCategories = 'Development, Research, Shopping, Social Media, Entertainment, News, Communication, Productivity, Education, Financial (Protected), Academic (Synthesis), Health, Travel, Other';
   const allCategories = customCategories.length > 0
     ? `${baseCategories}, ${customCategories.join(', ')}`
     : baseCategories;
@@ -92,6 +93,10 @@ CRITICAL RULES:
 6. "uncertainties" = Be explicit AND explanatory. For each uncertainty, explain the ambiguity. This enables human correction.
 7. "deepDive" = array of tab numbers for technical docs needing deeper analysis. Empty [] if none.
 8. DO NOT skip any tabs. List ALL ${tabs.length} assignments with reasoning.
+
+SPECIAL CATEGORY RULES:
+- "Financial (Protected)": Use for banking sites, payment processors, tax services, investment platforms. These are HIGH VALUE tabs that should never be accidentally trashed. Signals: bank URLs, payment/checkout flows, tax prep, investment dashboards.
+- "Academic (Synthesis)": Use for academic papers, arxiv PDFs, research publications, scholarly articles. These should be consolidated into notes. Signals: arxiv.org, .edu domains, PDF papers, "et al.", DOI links, journal names.
 
 Your reasoning must be AUDITABLE. A human reviewing your output should understand exactly why each tab was classified the way it was.
 
@@ -260,6 +265,8 @@ function parseLLMResponse(responseText, tabs, engineInfo, debugMode = false) {
     'Communication': 'Respond to messages or schedule meetings',
     'Productivity': 'Update documents or review tasks',
     'Education': 'Review course materials or complete assignments',
+    'Financial (Protected)': 'PROTECTED: Review but do not close without explicit action',
+    'Academic (Synthesis)': 'Extract key findings and add to research notes',
     'Unclassified': 'Review and organize these tabs'
   };
 
@@ -1015,6 +1022,14 @@ const CATEGORY_PATTERNS = {
   'Education': {
     urlPatterns: ['.edu', 'school', 'academy', 'university', 'college', 'coursera', 'udemy'],
     keywords: ['student', 'teacher', 'class', 'course', 'learn', 'education', 'grade']
+  },
+  'Financial (Protected)': {
+    urlPatterns: ['bank', 'chase.com', 'wellsfargo.com', 'bankofamerica.com', 'paypal.com', 'venmo.com', 'stripe.com', 'schwab.com', 'fidelity.com', 'vanguard.com', 'turbotax', 'irs.gov', 'tax', 'mint.com', 'plaid.com'],
+    keywords: ['banking', 'account balance', 'transfer', 'payment', 'invoice', 'tax return', 'investment', 'portfolio', '401k', 'ira', 'brokerage', 'checking', 'savings']
+  },
+  'Academic (Synthesis)': {
+    urlPatterns: ['arxiv.org', 'scholar.google', 'pubmed', 'researchgate.net', 'semanticscholar.org', 'jstor.org', 'springer.com', 'wiley.com', 'acm.org', 'ieee.org', 'nature.com', 'science.org', 'doi.org'],
+    keywords: ['abstract', 'et al', 'methodology', 'conclusion', 'hypothesis', 'peer-reviewed', 'journal', 'citation', 'bibliography', 'proceedings', 'publication']
   }
 };
 

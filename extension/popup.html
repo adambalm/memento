@@ -92,6 +92,57 @@
       font-size: 13px;
       cursor: pointer;
     }
+    .mode-selector {
+      margin-bottom: 15px;
+    }
+    .mode-selector label {
+      color: rgba(255, 255, 255, 0.9);
+      font-size: 12px;
+      display: block;
+      margin-bottom: 6px;
+    }
+    .mode-buttons {
+      display: flex;
+      gap: 8px;
+    }
+    .mode-btn {
+      flex: 1;
+      padding: 10px 12px;
+      font-size: 13px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-radius: 6px;
+      background: transparent;
+      color: rgba(255, 255, 255, 0.8);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .mode-btn:hover {
+      border-color: rgba(255, 255, 255, 0.6);
+      color: white;
+    }
+    .mode-btn.active {
+      background: rgba(255, 255, 255, 0.2);
+      border-color: white;
+      color: white;
+      font-weight: 600;
+    }
+    .lock-warning {
+      background: rgba(255, 200, 50, 0.2);
+      border: 1px solid rgba(255, 200, 50, 0.5);
+      padding: 10px;
+      border-radius: 6px;
+      margin-bottom: 15px;
+      font-size: 12px;
+      color: #ffe066;
+    }
+    .lock-warning a {
+      color: #ffe066;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+    .lock-warning a:hover {
+      color: white;
+    }
     .error {
       background: rgba(255, 255, 255, 0.2);
       padding: 10px;
@@ -118,6 +169,20 @@
   <div class="container">
     <h1>Memento</h1>
     <p class="subtitle">Capture & classify your browsing session</p>
+
+    <div id="lockWarning" class="lock-warning" style="display: none;">
+      ⚠️ <span id="lockMessage">Unresolved session</span>
+      <br><a id="lockLink" href="#">Open Launchpad →</a>
+    </div>
+
+    <div class="mode-selector">
+      <label>Output Mode</label>
+      <div class="mode-buttons">
+        <button class="mode-btn active" data-mode="results">Results</button>
+        <button class="mode-btn" data-mode="launchpad">Launchpad</button>
+      </div>
+    </div>
+
     <div class="model-selector">
       <label for="engineSelect">Model</label>
       <select id="engineSelect">

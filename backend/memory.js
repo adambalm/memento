@@ -12,16 +12,35 @@ async function ensureDir() {
   await fs.mkdir(MEMORY_DIR, { recursive: true });
 }
 
+/**
+ * Save a session to disk
+ * Ensures the session has the dispositions field for future user actions
+ * See: docs/SESSION-ARTIFACT-INVARIANTS.md
+ *
+ * @param {Object} data - Session data from classifier
+ * @returns {Promise<string|null>} Session ID (filename without .json) or null on error
+ */
 async function saveSession(data) {
   try {
     await ensureDir();
     const filename = getSessionFilename();
     const filepath = path.join(MEMORY_DIR, filename);
-    await fs.writeFile(filepath, JSON.stringify(data, null, 2));
+
+    // Ensure dispositions array exists (empty at creation, append-only thereafter)
+    // This is the schema preparation for future user disposition actions
+    const sessionData = {
+      ...data,
+      dispositions: data.dispositions || []
+    };
+
+    await fs.writeFile(filepath, JSON.stringify(sessionData, null, 2));
+    const sessionId = filename.replace('.json', '');
     console.error(`Session saved: ${filename}`);
+    return sessionId;
   } catch (error) {
     console.error('Failed to save session:', error.message);
     // Non-fatal: don't throw
+    return null;
   }
 }
 
