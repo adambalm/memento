@@ -1,6 +1,6 @@
 # Memento MVP
 
-Browser session capture and classification prototype.
+Browser session capture and classification system with forced-completion workflow.
 
 ## Quick Start
 
@@ -24,8 +24,22 @@ Backend runs at `http://localhost:3000`
 
 1. Open some browser tabs
 2. Click the Memento extension icon in Chrome toolbar
-3. Click "Capture Session"
-4. Results page opens with grouped tabs and analysis
+3. Choose output mode:
+   - **Results** - Passive view of classified tabs
+   - **Launchpad** - Forced-completion mode (must resolve all items)
+4. Click "Capture Session"
+
+## Output Modes
+
+### Results Mode
+Read-only view of classified tabs. No commitment required. Good for quick review.
+
+### Launchpad Mode
+Forced-completion workflow:
+- Acquires session lock (blocks new Launchpad captures)
+- Must resolve every item: Trash, Done, or Promote
+- Lock clears when all items resolved
+- Lock status visible globally (even in Results mode)
 
 ## Configuration
 
@@ -38,52 +52,88 @@ Environment variables (optional):
 
 ## API Endpoints
 
+### Classification
 - `POST /classifyBrowserContext` - Classify tabs, returns JSON
 - `POST /classifyAndRender` - Classify tabs, returns HTML page
 - `GET /results?data=...` - Render results from encoded JSON
+
+### Launchpad
+- `GET /launchpad/:sessionId` - Render Launchpad UI
+- `GET /api/launchpad/:sessionId/state` - Get session with dispositions applied
+- `POST /api/launchpad/:sessionId/disposition` - Record user action
+- `POST /api/launchpad/:sessionId/clear-lock` - Clear lock when complete
+
+### Lock Management
+- `GET /api/lock-status` - Get current lock status
+- `POST /api/acquire-lock` - Acquire session lock
 
 ## Project Structure
 
 ```
 memento-mvp/
 ├── backend/
-│   ├── server.js           # Express server
+│   ├── server.js           # Express server, all HTTP routes
 │   ├── classifier.js       # LLM classification with mock fallback
-│   ├── renderer.js         # HTML page renderer
+│   ├── renderer.js         # Results HTML renderer
+│   ├── launchpad.js        # Launchpad HTML renderer
 │   ├── memory.js           # Session persistence
+│   ├── dispositions.js     # Append-only action tracking
+│   ├── lockManager.js      # Session lock (~/.memento/lock.json)
+│   ├── contextLoader.js    # User context injection
+│   ├── pdfExtractor.js     # Playwright PDF extraction
+│   ├── mcp-server.js       # MCP server for Claude Desktop
 │   └── models/
 │       ├── index.js        # Model dispatch layer
 │       └── localOllama.js  # Ollama driver
 ├── extension/
 │   ├── manifest.json       # Chrome extension manifest v3
 │   ├── popup.html          # Extension popup UI
-│   └── popup.js            # Capture logic
+│   └── popup.js            # Capture and mode logic
 ├── memory/
 │   └── sessions/           # Saved session JSON files
+├── docs/
+│   └── SESSION-ARTIFACT-INVARIANTS.md  # Disposition semantics
 └── package.json
 ```
 
-## Session Output
+## Session Schema (v1.3.0)
 
 Each capture saves a timestamped JSON file to `memory/sessions/`:
 
 ```json
 {
-  "timestamp": "2025-12-19T09:25:08.048Z",
+  "timestamp": "2025-01-02T...",
   "totalTabs": 14,
   "narrative": "Summary of browsing session...",
-  "groups": { "Development": [...], "Shopping": [...] },
+  "groups": { "Development": [...], "Research": [...] },
   "tasks": [{ "category": "Development", "suggestedAction": "..." }],
   "summary": { "categories": [...], "tabsByCategory": {...} },
+  "dispositions": [],
   "source": "llm",
   "meta": {
-    "schemaVersion": "1.0.0",
+    "schemaVersion": "1.3.0",
     "engine": "ollama-local",
     "model": "qwen2.5-coder",
-    "endpoint": "http://adambalm:11434/api/generate"
+    "endpoint": "http://..."
   }
 }
 ```
+
+**Immutability guarantee:** Capture-time fields are frozen. Only `dispositions` array grows (append-only). See `docs/SESSION-ARTIFACT-INVARIANTS.md`.
+
+## MCP Integration
+
+For Claude Desktop integration, run the MCP server:
+
+```bash
+node backend/mcp-server.js
+```
+
+Available tools:
+- `list_sessions`, `read_session`, `get_latest_session`, `search_sessions`
+- `get_context`, `set_context` - User project context
+- `reclassify_session` - Re-run with different engine
+- `get_lock_status`, `clear_lock` - Lock management
 
 ## Model Dispatch
 
