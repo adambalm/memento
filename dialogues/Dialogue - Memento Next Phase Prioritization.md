@@ -163,6 +163,28 @@ After testing is complete:
 
 ---
 
+## HO Observation (Ed O'Connell)
+
+**Timestamp:** 2026-01-02T08:40:00Z
+**Type:** real-world usage note
+
+During initial testing of Launchpad mode, I promoted an item:
+
+```json
+{
+  "action": "promote",
+  "itemId": "https://varnelis.net/works_and_projects/the-rise-and-fall-of-the-author/",
+  "at": "2026-01-02T08:40:02.538Z",
+  "target": "basic-memory://notes/promoted"
+}
+```
+
+The UI said "item promoted" but nothing actually happened beyond recording the disposition. This is a **concrete example of Thread 3's incompleteness** - I expected the content to appear in Basic Memory, but it didn't.
+
+This may affect prioritization: Thread 1 (testing) is now partially complete (E2E suite exists, real browser capture works), but Thread 3 has immediate user-facing friction.
+
+---
+
 ## Turn 2: IA (ChatGPT)
 
 **Timestamp:** [pending]
