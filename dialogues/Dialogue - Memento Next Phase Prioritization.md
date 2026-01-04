@@ -185,6 +185,43 @@ This may affect prioritization: Thread 1 (testing) is now partially complete (E2
 
 ---
 
+## HO Observation #2 (Ed O'Connell)
+
+**Timestamp:** 2026-01-02T09:00:00Z
+**Type:** UX gap discovery
+
+After clearing several items, the page still shows "locked" with 52 items remaining. This revealed fundamental UX gaps:
+
+### Current State: Actions Don't Act
+
+| Action | Current Behavior | Expected Behavior |
+|--------|------------------|-------------------|
+| Trash | Records disposition only | Should close the tab |
+| Complete | Records disposition only | Should close the tab |
+| Promote | Records disposition only | Should write to Basic Memory AND close tab |
+
+The system is **append-only bookkeeping** - it tracks decisions but doesn't execute them.
+
+### Missing Capability: Tab Management
+
+The Launchpad UI has no connection to the Chrome extension. It cannot close tabs. Two options exist:
+
+**Option A (Extension-driven):** User processes Launchpad, returns to extension popup, extension reads dispositions and closes tabs.
+
+**Option B (Launchpad-driven):** Launchpad sends messages to extension to close tabs in real-time.
+
+### Questions Raised
+
+1. When does a session "end"? When all items resolved? When tabs closed?
+2. Can we reconstitute a session if the browser crashes? (Chrome doesn't expose session restore APIs)
+3. Is trim-as-you-go (Option B) or batch-close (Option A) the right UX?
+
+### Impact on Prioritization
+
+This surfaces a potential **Thread 6: Tab Lifecycle Management** - the plumbing to actually close tabs when dispositioned. Without this, Launchpad is a fancy TODO list that doesn't reduce cognitive load.
+
+---
+
 ## Turn 2: IA (ChatGPT)
 
 **Timestamp:** [pending]
