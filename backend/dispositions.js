@@ -17,7 +17,7 @@ const MEMORY_DIR = path.join(__dirname, '..', 'memory', 'sessions');
 /**
  * Valid disposition actions
  */
-const VALID_ACTIONS = ['trash', 'complete', 'regroup', 'reprioritize', 'promote'];
+const VALID_ACTIONS = ['trash', 'complete', 'regroup', 'reprioritize', 'promote', 'defer'];
 
 /**
  * Get the file path for a session
@@ -218,6 +218,10 @@ async function getSessionWithDispositions(sessionId) {
           break;
         case 'reprioritize':
           current.priority = disp.priority;
+          break;
+        case 'defer':
+          current.status = 'deferred';
+          current.deferredAt = disp.at;
           break;
       }
 

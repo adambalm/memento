@@ -194,6 +194,15 @@ function renderLaunchpadPage(sessionId, sessionState) {
       color: #3b82f6;
     }
 
+    .item.deferred {
+      opacity: 0.6;
+    }
+
+    .item.deferred .item-title::before {
+      content: '⏸ ';
+      color: #a855f7;
+    }
+
     .item-content {
       flex: 1;
       min-width: 0;
@@ -236,7 +245,8 @@ function renderLaunchpadPage(sessionId, sessionState) {
 
     .item.trashed .item-actions,
     .item.completed .item-actions,
-    .item.promoted .item-actions {
+    .item.promoted .item-actions,
+    .item.deferred .item-actions {
       display: none;
     }
 
@@ -266,6 +276,12 @@ function renderLaunchpadPage(sessionId, sessionState) {
       color: #93c5fd;
     }
     .action-btn.promote:hover { background: #1e40af; }
+
+    .action-btn.defer {
+      background: #581c87;
+      color: #d8b4fe;
+    }
+    .action-btn.defer:hover { background: #6b21a8; }
 
     .footer {
       margin-top: 24px;
@@ -367,7 +383,7 @@ function renderLaunchpadPage(sessionId, sessionState) {
           // Update UI
           const itemEl = document.querySelector('[data-item-id="' + itemId + '"]');
           if (itemEl) {
-            itemEl.classList.add(action === 'trash' ? 'trashed' : action === 'complete' ? 'completed' : 'promoted');
+            itemEl.classList.add(action === 'trash' ? 'trashed' : action === 'complete' ? 'completed' : action === 'defer' ? 'deferred' : 'promoted');
           }
 
           // Update count
@@ -449,7 +465,7 @@ function renderCategorySection(category, items) {
         <div class="item-url">${escapeHtml(item.url)}</div>
       </div>
       <div class="item-actions">
-        ${isProtected ? '' : `<button class="action-btn trash" onclick="recordDisposition('${escapeJs(item.itemId)}', 'trash')">Trash</button>`}
+        ${isProtected ? `<button class="action-btn defer" onclick="recordDisposition('${escapeJs(item.itemId)}', 'defer')">Defer</button>` : `<button class="action-btn trash" onclick="recordDisposition('${escapeJs(item.itemId)}', 'trash')">Trash</button>`}
         <button class="action-btn complete" onclick="recordDisposition('${escapeJs(item.itemId)}', 'complete')">Done</button>
         <button class="action-btn promote" onclick="recordDisposition('${escapeJs(item.itemId)}', 'promote', {target: 'basic-memory://notes/promoted'})">${isSynthesis ? 'Synthesize' : 'Promote'}</button>
       </div>

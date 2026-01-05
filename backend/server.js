@@ -216,6 +216,18 @@ app.post('/api/acquire-lock', async (req, res) => {
   }
 });
 
+// POST /api/lock/force-clear - Force clear lock (testing/emergency override)
+app.post('/api/lock/force-clear', async (req, res) => {
+  try {
+    const result = await clearLock(null, true); // override=true bypasses session check
+    console.error('Force clear lock requested');
+    res.json(result);
+  } catch (error) {
+    console.error('Force clear lock error:', error);
+    res.status(500).json({ success: false, message: 'Failed to force clear lock' });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Memento backend running at http://localhost:${PORT}`);
   console.log(`POST /classifyBrowserContext - Classify tabs and return JSON`);
