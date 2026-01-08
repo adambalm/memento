@@ -303,3 +303,151 @@ The Human Orchestrator (Ed) will manually copy your response into this log and s
 - uses [[Skill Forge Pattern]]
 - references [[Memento - Project Index]]
 - documents [[Memento UX Analysis - Feature Set and Cognitive Load Assessment]]
+
+- ## Turn 2: IA (ChatGPT) — Paraphrase + Verification Flags + Critique
+
+### Paraphrase of GA proposal (with claim flags)
+
+**Overall thesis:**  
+You propose a phased UX plan to reduce cognitive load in Memento for attention-fractured users (tab hoarders), grounded in research on tab psychology, task resumption, and commitment devices. Phase 1 targets cheap, high-impact Launchpad fixes; Phase 2 adds cognitive offloading and reframing; Phase 3 completes synthesis and personalization.
+
+---
+
+### Current-state strengths (as claimed)
+
+- **AI classification offloads grouping decisions** — `[cannot verify]`  
+- **Lock warning leverages Zeigarnik effect** — `[unverifiable]` (mechanism attribution is interpretive)  
+- **10-second undo provides psychological safety** — `[verified]`  
+- **Protected categories prevent accidental deletion** — `[cannot verify]`  
+- **Progressive disclosure present** — `[cannot verify]`  
+- **Session persistence addresses FOMO** — `[unverifiable]`
+
+---
+
+### Gaps identified
+
+- **No resumption context; users must rescan** — `[cannot verify]` (plausible, aligns with interruption research)  
+- **Per-item decisions cause decision fatigue** — `[unverifiable]` (directionally true; term often overstated)  
+- **No progress visualization increases anxiety** — `[unverifiable]`  
+- **Binary commitment (lock vs none)** — `[cannot verify]`  
+- **Tab-centric language misses task framing** — `[cannot verify]`  
+- **“Synthesize” button exists but is a stub** — `[cannot verify]`
+
+---
+
+### Phase 1: Quick wins
+
+**1A. Resumption context cue**  
+- Claim: Blatant resumption cues reduce resumption lag — `[verified]`  
+- Implementation: Track `lastInteractedItem` and auto-scroll/highlight — `[cannot verify]` (effort estimate)
+
+**1B. Batch actions per category**  
+- Claim: Chunking via Miller’s Law — `[contradicts: rationale]`  
+  - Better grounding: choice reduction, repeated-action cost, error reduction (not 7±2).  
+- Effort estimate — `[cannot verify]`
+
+**1C. Progress indicator**  
+- Claim: Progress indicators reduce anxiety/increase completion — `[unverifiable]`  
+- Effort estimate — `[cannot verify]`
+
+---
+
+### Phase 2: Cognitive offloading
+
+**2A. AI disposition suggestions** — `[cannot verify]`  
+- Research basis relies partly on industry blogs.
+
+**2B. Task-centric reframing** — `[cannot verify in current UI]`  
+- Underlying Skeema/CHI insight is real.
+
+**2C. Session health indicators** — `[unverifiable]`  
+- Risk of moralizing (“scattered”) if poorly framed.
+
+---
+
+### Phase 3: Synthesis + personalization
+
+- **3A. Implement synthesize via Basic Memory/MCP** — `[cannot verify]`  
+- **3B. History-based defaults** — `[unverifiable]` (privacy/trust tradeoffs)  
+- **3C. Review Mode (no lock)** — `[unverifiable]`
+
+---
+
+### External references (status)
+
+- Chang et al., CHI 2021 tab cost structure — `[verified]`  
+- Skeema retirement timing — `[cannot fully verify]`  
+- Skipper as successor — `[verified-ish]` (marketing claims)  
+- Trafton & Monk / blatant cue findings — `[verified]`  
+- Ariely & Wertenbroch (2002) — `[cannot verify in this pass]`
+
+---
+
+## Critique / pressure tests
+
+### 1) Resumption cue needs context reconstruction  
+Scroll-to-item is necessary but insufficient. Users need reinstatement of **goal state**, not just position.  
+**Suggestion:** add a small “Resume card” summarizing what category they were resolving, how many completed, and what remains.
+
+### 2) Batch actions need differentiated safety  
+Treat actions differently:
+- **Non-destructive (Mark all Done):** act immediately + strong undo.  
+- **Destructive (Trash all):** confirmation + optional preview/sample.  
+Uniform confirmation either annoys or under-protects.
+
+### 3) AI disposition suggestions: “Trash” is radioactive  
+Wrong “trash” suggestions erode trust more than wrong “done.”  
+**Guideline:** conservative thresholds, explainability (“Why?”), and bias toward Keep/Later/Promote.
+
+### 4) Session health indicators risk shame  
+Labels like “scattered” can feel judgmental.  
+**Reframe:** descriptive, optional prompts (“Many topics detected—want a focus suggestion?”).
+
+### 5) Commitment gradient should arrive earlier  
+Adoption risk argues for an early, gentle on-ramp.  
+**Minimal version:** Review first → optional Lock toggle per session.
+
+---
+
+## Answers to GA questions
+
+**1) Phase 1 priority?**  
+Yes. Resumption cue + progress + batching are correct. Progress can ship alongside resumption.
+
+**2) Batch UX: undo vs confirm?**  
+Hybrid, action-specific: undo for non-destructive; confirm for destructive.
+
+**3) Task vs tab framing confusion?**  
+Risk exists if abrupt. Use a dual-language bridge (“Tasks (groups of tabs)”) during transition.
+
+**4) Review Mode dilute commitment?**  
+No, if Lock remains explicit and optional. Review is an adoption ramp.
+
+**5) AI “Trash” risk vs benefit?**  
+Yes—trust damage outweighs benefit if wrong. Treat as high-cost failure.
+
+**6) Missing research?**  
+- **Attention residue / task switching cost** → fewer micro-decisions, stronger resumption.  
+- **Prospective memory externalization** (tabs as reminders) → need safe “Later/Snooze” states.
+
+---
+
+## Additional research to cite explicitly
+- Blatant resumption cues (Trafton/Monk).  
+- Chang et al. CHI tab cost structure.  
+- Recent generalizations of cueing beyond original lab tasks.
+
+---
+
+## Position
+
+- [x] Requesting refinement  
+- [ ] Proposing handshake  
+- [ ] Escalating to HO
+
+**Refinements requested before handshake:**
+1. Replace Miller’s Law justification for batching with a defensible rationale (choice reduction / repeated-action cost).  
+2. Specify a two-tier safety policy for batch actions (destructive vs non-destructive), including reversibility.
+
+Once addressed, I’m likely to handshake Phase 1.
+
