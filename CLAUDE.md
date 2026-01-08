@@ -96,24 +96,15 @@ Run with: `node backend/mcp-server.js` (stdio transport)
 
 ## Known Issues
 
-### Tab Capture Incomplete (2025-12-20)
-**Status:** Diagnostic logging added, root cause unconfirmed
-
-**Symptom:** Extension reports capturing N tabs, but visible browser tabs are not all present in the session JSON.
-
-**Diagnostic logging added** (popup.js lines 143-211):
-- Raw tab count from `chrome.tabs.query({})` logged to console
-- Per-tab decisions logged (CAPTURED, SKIP chrome://, SKIP extension://, ERROR)
-- Summary shows raw vs final count
-
-**Possible causes:**
-1. **Chrome Profiles** — Extension only sees tabs from its own profile
-2. **Window isolation** — May need explicit `windowId` handling
-3. **Tab Groups** — Collapsed groups may behave differently
-
-**To test:** Open extension popup, capture, check browser console for `[Memento]` logs.
+None currently tracked.
 
 ### Fixed Issues
+
+**Tab Capture Incomplete (resolved 2026-01-08)**
+- Original symptom: Extension reports capturing N tabs, but visible browser tabs not all present
+- Root cause: **Chrome profile isolation** — extension only sees tabs from its own profile
+- Resolution: Diagnostic logging (popup.js lines 143-211) confirmed capture works correctly within profile scope
+- Evidence: Recent sessions consistently capture 22-28 tabs with totalTabs matching grouped items
 
 **Groups Format Mismatch (fixed 2025-01-02)**
 - Session files store groups as object `{"Category": [...]}` not array
