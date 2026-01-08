@@ -283,6 +283,12 @@ function renderLaunchpadPage(sessionId, sessionState) {
     }
     .action-btn.defer:hover { background: #6b21a8; }
 
+    .action-btn.undo {
+      background: #374151;
+      color: #d1d5db;
+    }
+    .action-btn.undo:hover { background: #4b5563; }
+
     .footer {
       margin-top: 24px;
       padding-top: 16px;
@@ -368,6 +374,7 @@ function renderLaunchpadPage(sessionId, sessionState) {
   <script>
     const SESSION_ID = '${sessionId}';
     let unresolvedCount = ${unresolvedCount};
+    const lastActions = new Map(); // Track last action per item for undo
 
     async function recordDisposition(itemId, action, extra = {}) {
       try {
@@ -381,9 +388,14 @@ function renderLaunchpadPage(sessionId, sessionState) {
 
         if (result.success) {
           // Update UI
-          const itemEl = document.querySelector('[data-item-id="' + itemId + '"]');
+          const itemEl = document.querySelector('[data-item-id="' + CSS.escape(itemId) + '"]');
           if (itemEl) {
-            itemEl.classList.add(action === 'trash' ? 'trashed' : action === 'complete' ? 'completed' : action === 'defer' ? 'deferred' : 'promoted');
+            const statusClass = action === 'trash' ? 'trashed' : action === 'complete' ? 'completed' : action === 'defer' ? 'deferred' : 'promoted';
+            itemEl.classList.add(statusClass);
+
+            // Track action for undo and show undo button
+            lastActions.set(itemId, action);
+            showUndoButton(itemEl, itemId, action);
           }
 
           // Update count
@@ -402,6 +414,76 @@ function renderLaunchpadPage(sessionId, sessionState) {
           showToast('Item ' + action + (action === 'trash' ? 'ed' : 'd'), 'success');
         } else {
           showToast(result.message || 'Failed', 'error');
+        }
+      } catch (error) {
+        showToast('Error: ' + error.message, 'error');
+      }
+    }
+
+    function showUndoButton(itemEl, itemId, lastAction) {
+      // Remove existing undo button if any
+      const existingUndo = itemEl.querySelector('.undo-container');
+      if (existingUndo) existingUndo.remove();
+
+      // Create undo container
+      const undoContainer = document.createElement('div');
+      undoContainer.className = 'undo-container';
+      undoContainer.style.cssText = 'display: flex; gap: 8px; margin-left: auto;';
+
+      const undoBtn = document.createElement('button');
+      undoBtn.className = 'action-btn undo';
+      undoBtn.textContent = 'Undo';
+      undoBtn.onclick = () => undoDisposition(itemId, lastAction);
+
+      undoContainer.appendChild(undoBtn);
+      itemEl.appendChild(undoContainer);
+
+      // Auto-hide after 10 seconds
+      setTimeout(() => {
+        if (undoContainer.parentNode) {
+          undoContainer.remove();
+        }
+      }, 10000);
+    }
+
+    async function undoDisposition(itemId, undoneAction) {
+      try {
+        const response = await fetch('/api/launchpad/' + SESSION_ID + '/disposition', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'undo', itemId, undoes: undoneAction })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          // Update UI - restore to pending
+          const itemEl = document.querySelector('[data-item-id="' + CSS.escape(itemId) + '"]');
+          if (itemEl) {
+            itemEl.classList.remove('trashed', 'completed', 'promoted', 'deferred');
+
+            // Remove undo button
+            const undoContainer = itemEl.querySelector('.undo-container');
+            if (undoContainer) undoContainer.remove();
+          }
+
+          // Update count
+          unresolvedCount++;
+          document.getElementById('unresolved-count').textContent = unresolvedCount;
+
+          // Disable clear button if items now pending
+          if (unresolvedCount > 0) {
+            const btn = document.getElementById('clear-lock-btn');
+            btn.classList.remove('enabled');
+            btn.disabled = true;
+            btn.textContent = 'Resolve all items to unlock';
+            document.querySelector('.status').classList.remove('complete');
+          }
+
+          lastActions.delete(itemId);
+          showToast('Action undone', 'success');
+        } else {
+          showToast(result.message || 'Failed to undo', 'error');
         }
       } catch (error) {
         showToast('Error: ' + error.message, 'error');

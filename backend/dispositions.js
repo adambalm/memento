@@ -17,7 +17,7 @@ const MEMORY_DIR = path.join(__dirname, '..', 'memory', 'sessions');
 /**
  * Valid disposition actions
  */
-const VALID_ACTIONS = ['trash', 'complete', 'regroup', 'reprioritize', 'promote', 'defer'];
+const VALID_ACTIONS = ['trash', 'complete', 'regroup', 'reprioritize', 'promote', 'defer', 'undo'];
 
 /**
  * Get the file path for a session
@@ -78,6 +78,15 @@ async function appendDisposition(sessionId, disposition) {
     }
   }
 
+  if (disposition.action === 'undo') {
+    if (!disposition.undoes) {
+      return {
+        success: false,
+        message: 'undo action requires "undoes" field specifying which action to undo'
+      };
+    }
+  }
+
   try {
     // Read current session
     const filepath = sessionPath(sessionId);
@@ -96,6 +105,7 @@ async function appendDisposition(sessionId, disposition) {
     if (disposition.to) entry.to = disposition.to;
     if (disposition.target) entry.target = disposition.target;
     if (disposition.priority !== undefined) entry.priority = disposition.priority;
+    if (disposition.undoes) entry.undoes = disposition.undoes;
 
     // Ensure dispositions array exists
     if (!session.dispositions) {
@@ -222,6 +232,18 @@ async function getSessionWithDispositions(sessionId) {
         case 'defer':
           current.status = 'deferred';
           current.deferredAt = disp.at;
+          break;
+        case 'undo':
+          // Restore item to pending status
+          current.status = 'pending';
+          current.undoneAt = disp.at;
+          current.undoneAction = disp.undoes;
+          // Clear previous action timestamps
+          delete current.trashedAt;
+          delete current.completedAt;
+          delete current.promotedAt;
+          delete current.promotedTo;
+          delete current.deferredAt;
           break;
       }
 

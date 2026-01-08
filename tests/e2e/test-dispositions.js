@@ -91,6 +91,34 @@ async function test_dispositions_promoteRecorded(sessionId, itemId) {
   console.log(colors.green('    PASS'));
 }
 
+async function test_dispositions_undoRestoresPending(sessionId, itemId) {
+  console.log('  Testing: Undo disposition restores item to pending...');
+
+  // First trash the item
+  const trashResult = await recordDisposition(sessionId, 'trash', itemId);
+  assert(trashResult.success, `Trash should succeed: ${trashResult.message}`);
+
+  // Check it's trashed
+  let state = await getSessionState(sessionId);
+  assertEqual(state.itemStates[itemId].status, 'trashed', 'Item should be trashed');
+
+  // Now undo
+  const undoResult = await recordDisposition(sessionId, 'undo', itemId, { undoes: 'trash' });
+  assert(undoResult.success, `Undo should succeed: ${undoResult.message}`);
+
+  // Check it's back to pending
+  state = await getSessionState(sessionId);
+  assertEqual(state.itemStates[itemId].status, 'pending', 'Item should be pending after undo');
+
+  // Verify undo disposition in file
+  const session = await readSessionFile(sessionId);
+  const undoDisp = session.dispositions.find(d => d.action === 'undo' && d.itemId === itemId);
+  assert(undoDisp, 'Undo disposition should exist');
+  assertEqual(undoDisp.undoes, 'trash', 'Undo should reference the undone action');
+
+  console.log(colors.green('    PASS'));
+}
+
 async function runTests() {
   console.log(colors.blue('\n=== Test 3: Disposition Recording ===\n'));
 
@@ -102,7 +130,7 @@ async function runTests() {
 
   try {
     // Create test session with enough items
-    const { sessionId, response } = await createTestSession({ tabCount: 4 });
+    const { sessionId, response } = await createTestSession({ tabCount: 5 });
     testSessionIds.push(sessionId);
 
     // Get item IDs from the session
@@ -114,7 +142,7 @@ async function runTests() {
       }
     }
 
-    if (allItems.length < 3) {
+    if (allItems.length < 4) {
       throw new Error(`Not enough items in session: ${allItems.length}`);
     }
 
@@ -135,6 +163,10 @@ async function runTests() {
 
     // Test 4: Promote
     await test_dispositions_promoteRecorded(sessionId, allItems[2]);
+    passed++;
+
+    // Test 5: Undo
+    await test_dispositions_undoRestoresPending(sessionId, allItems[3]);
     passed++;
 
   } catch (err) {

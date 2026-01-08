@@ -1094,55 +1094,9 @@ function renderResultsPage(data, sessionId = null) {
       ${cost ? `<span class="cost">$${cost.totalCost}</span>` : ''}
     </div>
     ${sessionId ? `
-    <button id="focus-mode-btn" class="focus-mode-btn" onclick="enterFocusMode()">
-      <span class="focus-mode-icon">&#9881;</span>
-      Enter Focus Mode
+    <button id="focus-mode-btn" class="focus-mode-btn" onclick="window.location.href='http://localhost:3000/launchpad/${escapeHtml(sessionId)}'">
+      Launchpad
     </button>
-    <script>
-      const BACKEND_URL = 'http://localhost:3000';
-      const SESSION_ID = '${escapeHtml(sessionId)}';
-      const TOTAL_ITEMS = ${totalTabs};
-
-      async function enterFocusMode() {
-        const btn = document.getElementById('focus-mode-btn');
-        btn.disabled = true;
-        btn.innerHTML = '<span class="focus-mode-icon">&#8987;</span> Acquiring lock...';
-
-        try {
-          // First check if already locked
-          const statusRes = await fetch(BACKEND_URL + '/api/lock-status');
-          const status = await statusRes.json();
-
-          if (status.locked && status.sessionId !== SESSION_ID) {
-            alert('Another session is already in Focus Mode.\\n\\nSession: ' + status.sessionId + '\\nItems remaining: ' + status.itemsRemaining + '\\n\\nPlease complete that session first.');
-            btn.disabled = false;
-            btn.innerHTML = '<span class="focus-mode-icon">&#9881;</span> Enter Focus Mode';
-            return;
-          }
-
-          // Acquire lock for this session
-          const lockRes = await fetch(BACKEND_URL + '/api/acquire-lock', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sessionId: SESSION_ID, itemsRemaining: TOTAL_ITEMS })
-          });
-          const lockResult = await lockRes.json();
-
-          if (lockResult.success) {
-            // Redirect to Launchpad
-            window.location.href = BACKEND_URL + '/launchpad/' + SESSION_ID;
-          } else {
-            alert('Could not acquire lock: ' + (lockResult.message || 'Unknown error'));
-            btn.disabled = false;
-            btn.innerHTML = '<span class="focus-mode-icon">&#9881;</span> Enter Focus Mode';
-          }
-        } catch (err) {
-          alert('Error connecting to backend: ' + err.message);
-          btn.disabled = false;
-          btn.innerHTML = '<span class="focus-mode-icon">&#9881;</span> Enter Focus Mode';
-        }
-      }
-    </script>
     ` : ''}
   </header>
 

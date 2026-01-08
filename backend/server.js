@@ -143,7 +143,7 @@ app.get('/api/launchpad/:sessionId/state', async (req, res) => {
 app.post('/api/launchpad/:sessionId/disposition', async (req, res) => {
   try {
     const { sessionId } = req.params;
-    const { action, itemId, from, to, target, priority } = req.body;
+    const { action, itemId, from, to, target, priority, undoes } = req.body;
 
     const result = await appendDisposition(sessionId, {
       action,
@@ -151,7 +151,8 @@ app.post('/api/launchpad/:sessionId/disposition', async (req, res) => {
       from,
       to,
       target,
-      priority
+      priority,
+      undoes
     });
 
     res.json(result);
