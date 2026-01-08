@@ -25,7 +25,7 @@ async function ensureDir() {
 
 /**
  * Get current lock status
- * @returns {Promise<{locked: boolean, sessionId: string|null, lockedAt: string|null, itemsRemaining: number}>}
+ * @returns {Promise<{locked: boolean, sessionId: string|null, lockedAt: string|null, itemsRemaining: number, resumeState: Object|null}>}
  */
 async function getLockStatus() {
   try {
@@ -35,7 +35,8 @@ async function getLockStatus() {
       locked: true,
       sessionId: lock.sessionId,
       lockedAt: lock.lockedAt,
-      itemsRemaining: lock.itemsRemaining || 0
+      itemsRemaining: lock.itemsRemaining || 0,
+      resumeState: lock.resumeState || null
     };
   } catch (error) {
     if (error.code === 'ENOENT') {
@@ -44,7 +45,8 @@ async function getLockStatus() {
         locked: false,
         sessionId: null,
         lockedAt: null,
-        itemsRemaining: 0
+        itemsRemaining: 0,
+        resumeState: null
       };
     }
     // Log but return unlocked state for other errors
@@ -53,7 +55,8 @@ async function getLockStatus() {
       locked: false,
       sessionId: null,
       lockedAt: null,
-      itemsRemaining: 0
+      itemsRemaining: 0,
+      resumeState: null
     };
   }
 }
@@ -179,11 +182,55 @@ async function updateItemsRemaining(itemsRemaining) {
   }
 }
 
+/**
+ * Update resume state for task resumption cues
+ * @param {Object} resumeState - Resume state object
+ * @param {string} [resumeState.goal] - What the user is trying to accomplish
+ * @param {string} [resumeState.lastActivity] - ISO timestamp of last activity
+ * @param {string} [resumeState.focusCategory] - Category user was working on
+ * @returns {Promise<{success: boolean, message: string}>}
+ */
+async function updateResumeState(resumeState) {
+  try {
+    const currentLock = await getLockStatus();
+    if (!currentLock.locked) {
+      return {
+        success: false,
+        message: 'No active lock to update'
+      };
+    }
+
+    const lock = {
+      sessionId: currentLock.sessionId,
+      lockedAt: currentLock.lockedAt,
+      itemsRemaining: currentLock.itemsRemaining,
+      resumeState: {
+        ...currentLock.resumeState,
+        ...resumeState,
+        lastActivity: new Date().toISOString()
+      }
+    };
+    await fs.writeFile(LOCK_FILE, JSON.stringify(lock, null, 2));
+
+    return {
+      success: true,
+      message: 'Resume state updated'
+    };
+  } catch (error) {
+    console.error('Failed to update resume state:', error.message);
+    return {
+      success: false,
+      message: `Failed to update resume state: ${error.message}`
+    };
+  }
+}
+
 module.exports = {
   getLockStatus,
   acquireLock,
   clearLock,
   updateItemsRemaining,
+  updateResumeState,
   MEMENTO_DIR,
   LOCK_FILE
 };

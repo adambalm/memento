@@ -7,8 +7,8 @@ const { saveSession, readSession } = require('./memory');
 const { loadContext } = require('./contextLoader');
 const { processVisualExtractionTabs } = require('./pdfExtractor');
 const { renderLaunchpadPage } = require('./launchpad');
-const { appendDisposition, getSessionWithDispositions } = require('./dispositions');
-const { getLockStatus, clearLock, acquireLock } = require('./lockManager');
+const { appendDisposition, appendBatchDisposition, getSessionWithDispositions } = require('./dispositions');
+const { getLockStatus, clearLock, acquireLock, updateResumeState } = require('./lockManager');
 
 const app = express();
 const PORT = 3000;
@@ -115,10 +115,31 @@ app.get('/launchpad/:sessionId', async (req, res) => {
       return res.status(404).send('<html><body><h1>Session not found</h1></body></html>');
     }
 
-    res.send(renderLaunchpadPage(sessionId, sessionState));
+    // Get lock status for Resume Card
+    const lockStatus = await getLockStatus();
+
+    res.send(renderLaunchpadPage(sessionId, sessionState, lockStatus));
   } catch (error) {
     console.error('Launchpad error:', error);
     res.status(500).send('<html><body><h1>Error loading Launchpad</h1></body></html>');
+  }
+});
+
+// GET /review/:sessionId - Review Mode (no lock required)
+app.get('/review/:sessionId', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const sessionState = await getSessionWithDispositions(sessionId);
+
+    if (!sessionState) {
+      return res.status(404).send('<html><body><h1>Session not found</h1></body></html>');
+    }
+
+    // Review mode - no lock status needed
+    res.send(renderLaunchpadPage(sessionId, sessionState, {}, true));
+  } catch (error) {
+    console.error('Review mode error:', error);
+    res.status(500).send('<html><body><h1>Error loading Review</h1></body></html>');
   }
 });
 
@@ -159,6 +180,24 @@ app.post('/api/launchpad/:sessionId/disposition', async (req, res) => {
   } catch (error) {
     console.error('Disposition error:', error);
     res.status(500).json({ success: false, message: 'Failed to record disposition' });
+  }
+});
+
+// POST /api/launchpad/:sessionId/batch-disposition - Record multiple actions atomically
+app.post('/api/launchpad/:sessionId/batch-disposition', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { dispositions } = req.body;
+
+    if (!Array.isArray(dispositions)) {
+      return res.status(400).json({ success: false, message: 'dispositions array required' });
+    }
+
+    const result = await appendBatchDisposition(sessionId, dispositions);
+    res.json(result);
+  } catch (error) {
+    console.error('Batch disposition error:', error);
+    res.status(500).json({ success: false, message: 'Failed to record batch disposition' });
   }
 });
 
@@ -214,6 +253,19 @@ app.post('/api/acquire-lock', async (req, res) => {
   } catch (error) {
     console.error('Acquire lock error:', error);
     res.status(500).json({ success: false, message: 'Failed to acquire lock' });
+  }
+});
+
+// POST /api/launchpad/:sessionId/resume-state - Update resume state for task resumption
+app.post('/api/launchpad/:sessionId/resume-state', async (req, res) => {
+  try {
+    const { goal, focusCategory } = req.body;
+
+    const result = await updateResumeState({ goal, focusCategory });
+    res.json(result);
+  } catch (error) {
+    console.error('Resume state error:', error);
+    res.status(500).json({ success: false, message: 'Failed to update resume state' });
   }
 });
 

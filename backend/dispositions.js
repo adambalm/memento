@@ -17,7 +17,7 @@ const MEMORY_DIR = path.join(__dirname, '..', 'memory', 'sessions');
 /**
  * Valid disposition actions
  */
-const VALID_ACTIONS = ['trash', 'complete', 'regroup', 'reprioritize', 'promote', 'defer', 'undo'];
+const VALID_ACTIONS = ['trash', 'complete', 'regroup', 'reprioritize', 'promote', 'defer', 'later', 'undo'];
 
 /**
  * Get the file path for a session
@@ -233,6 +233,10 @@ async function getSessionWithDispositions(sessionId) {
           current.status = 'deferred';
           current.deferredAt = disp.at;
           break;
+        case 'later':
+          current.status = 'later';
+          current.laterAt = disp.at;
+          break;
         case 'undo':
           // Restore item to pending status
           current.status = 'pending';
@@ -244,6 +248,7 @@ async function getSessionWithDispositions(sessionId) {
           delete current.promotedAt;
           delete current.promotedTo;
           delete current.deferredAt;
+          delete current.laterAt;
           break;
       }
 
@@ -277,8 +282,106 @@ async function getSessionWithDispositions(sessionId) {
   }
 }
 
+/**
+ * Append multiple dispositions atomically.
+ *
+ * Used for batch operations. Maintains append-only invariant.
+ * All dispositions are written in a single file operation.
+ *
+ * @param {string} sessionId - Session ID
+ * @param {Array<Object>} dispositions - Array of disposition objects
+ * @returns {Promise<{success: boolean, message: string, count: number}>}
+ */
+async function appendBatchDisposition(sessionId, dispositions) {
+  if (!Array.isArray(dispositions) || dispositions.length === 0) {
+    return {
+      success: false,
+      message: 'dispositions must be a non-empty array'
+    };
+  }
+
+  // Validate all dispositions first
+  for (const disposition of dispositions) {
+    if (!disposition.action || !VALID_ACTIONS.includes(disposition.action)) {
+      return {
+        success: false,
+        message: `Invalid action: ${disposition.action}. Must be one of: ${VALID_ACTIONS.join(', ')}`
+      };
+    }
+    if (!disposition.itemId) {
+      return {
+        success: false,
+        message: 'Missing required field: itemId in one or more dispositions'
+      };
+    }
+  }
+
+  try {
+    // Read current session
+    const filepath = sessionPath(sessionId);
+    const content = await fs.readFile(filepath, 'utf-8');
+    const session = JSON.parse(content);
+
+    // Ensure dispositions array exists
+    if (!session.dispositions) {
+      session.dispositions = [];
+    }
+
+    const timestamp = new Date().toISOString();
+    const entries = [];
+
+    // Build all entries
+    for (const disposition of dispositions) {
+      const entry = {
+        action: disposition.action,
+        itemId: disposition.itemId,
+        at: timestamp,
+        batch: true // Mark as batch operation for audit trail
+      };
+
+      // Add action-specific fields
+      if (disposition.from) entry.from = disposition.from;
+      if (disposition.to) entry.to = disposition.to;
+      if (disposition.target) entry.target = disposition.target;
+      if (disposition.priority !== undefined) entry.priority = disposition.priority;
+      if (disposition.undoes) entry.undoes = disposition.undoes;
+
+      entries.push(entry);
+    }
+
+    // APPEND ALL — single atomic operation
+    session.dispositions.push(...entries);
+
+    // Write back
+    await fs.writeFile(filepath, JSON.stringify(session, null, 2));
+
+    console.error(`Batch disposition appended: ${entries.length} items in session ${sessionId}`);
+
+    return {
+      success: true,
+      message: `Appended ${entries.length} dispositions`,
+      count: entries.length,
+      dispositions: entries
+    };
+
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return {
+        success: false,
+        message: `Session not found: ${sessionId}`
+      };
+    }
+    console.error(`Failed to append batch disposition: ${error.message}`);
+    return {
+      success: false,
+      message: `Failed to append batch disposition: ${error.message}`
+    };
+  }
+}
+
 module.exports = {
   appendDisposition,
+  appendBatchDisposition,
   getDispositions,
   getSessionWithDispositions,
   VALID_ACTIONS
