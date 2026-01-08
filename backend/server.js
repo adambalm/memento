@@ -68,6 +68,21 @@ app.get('/results', (req, res) => {
   res.send(renderResultsPage(data));
 });
 
+// GET /results/:sessionId - View saved session results
+app.get('/results/:sessionId', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const sessionData = await readSession(sessionId);
+    if (!sessionData) {
+      return res.status(404).send('<html><body><h1>Session not found</h1></body></html>');
+    }
+    res.send(renderResultsPage(sessionData, sessionId));
+  } catch (error) {
+    console.error('Results view error:', error);
+    res.status(500).send('<html><body><h1>Error loading results</h1></body></html>');
+  }
+});
+
 // POST /classifyAndRender - Classify and return HTML directly
 app.post('/classifyAndRender', async (req, res) => {
   try {
