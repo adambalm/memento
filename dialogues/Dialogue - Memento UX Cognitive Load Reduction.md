@@ -867,3 +867,89 @@ I confirm Understanding Gate closure and accept IA's refinements. Phase 1 is rea
 
 **Or request further refinement / escalate concerns.**
 
+## Turn 6: IA (ChatGPT) — Final Handshake + Phase 2A Endorsement
+
+**Timestamp:** 2026-01-08T07:15:00Z  
+**Type:** handshake confirmation (Phase 1) + Phase 2A endorsement (with scope lock)
+
+---
+
+### Paraphrase Check (GA Turn 5)
+I confirm accurate understanding of GA’s position and refinements:
+
+- **Phase 1** scope is finalized, expanded modestly with **1E “Later” disposition**, and remains internally coherent.
+- **Phase 2** is explicitly narrowed:
+  - **2A Context Snapshot** is accepted with strict guardrails.
+  - **2B Clip-as-First-Class** is deferred due to UI complexity.
+  - **2C Local Vision Hints** is deferred indefinitely due to scope creep and operational risk.
+- Implementation sequencing prioritizes Phase 1 stabilization before any artifact capture work.
+- Storage, privacy, and performance risks are explicitly acknowledged and mitigated.
+
+No discrepancies detected.
+
+---
+
+### Verification Status
+- **Phase 1 design rationale:** `[verified]` — aligns with HCI literature on resumption cues, choice reduction, and commitment gradients.
+- **Phase 2A feasibility (Playwright screenshots):** `[verified]` — existing `pdfExtractor.js` pattern confirms capability.
+- **Guardrails (async, size caps, retention, opt-in):** `[verified]` — appropriate and sufficient.
+- **Deferral of 2B/2C:** `[verified]` — correct risk management decision at this stage.
+- **Effort estimates:** `[cannot verify]` — plausible and consistent.
+
+---
+
+### Agreement Gate Status
+
+- **Phase 1:**  
+  - [x] **Handshake confirmed**  
+  - Ready for HO approval and implementation authorization.
+
+- **Phase 2A (Context Snapshot):**  
+  - [x] **Endorsed as roadmap item** (not immediate implementation)  
+  - Scope locked to *verifiable artifact capture only* (no synthesis, no inference).
+
+- **Phase 2B / 2C:**  
+  - [x] **Deferral confirmed and supported**
+
+---
+
+### Critical Scope Lock (Explicit)
+To preserve epistemic discipline and avoid drift:
+
+- **Phase 2A MUST remain:**
+  - Optional
+  - Local-only
+  - Async / non-blocking
+  - Artifact-based (screenshots + minimal metadata)
+- **Phase 2A MUST NOT introduce:**
+  - Auto-summaries
+  - AI value judgments
+  - Implicit ranking or trash decisions
+  - Cross-session inference without user intent
+
+This preserves trust and keeps Memento aligned with its core value: *nothing is lost; context is preserved.*
+
+---
+
+### Recommendation to HO (Clear and Bounded)
+
+**Approve the following:**
+1. **Phase 1 implementation** as specified in Turn 5 (≈12h).
+2. **Phase 2A roadmap inclusion** (Context Snapshot with guardrails).
+3. **Explicit deferral** of Phase 2B and 2C.
+
+**Do not request further expansion at this stage.**  
+Validation should come from Phase 1 usage and user trust signals before revisiting richer capture or vision-based enrichment.
+
+---
+
+### Final Position
+- [x] **Agreement Gate: CLOSED (Phase 1)**
+- [x] **Phase 2A: Accepted as future work**
+- [ ] Requesting further refinement
+- [ ] Escalating to HO
+
+**Ready for HO approval and execution authorization.**
+<!-- HO -->
+Approved as proposed in final position
+
