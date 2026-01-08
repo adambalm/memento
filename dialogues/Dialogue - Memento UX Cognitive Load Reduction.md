@@ -5,7 +5,7 @@
 **Protocol:** Lanesborough Protocol
 **Pattern:** Skill Forge
 **Initiated:** 2026-01-08
-**Status:** TURN 0 - Initialization (awaiting IA engagement)
+**Status:** TURN 3 - GA Refinement (responding to IA critique)
 **Transport:** GitHub (append-only markdown log, manual copy between agents)
 
 ---
@@ -449,5 +449,166 @@ Yes—trust damage outweighs benefit if wrong. Treat as high-cost failure.
 1. Replace Miller’s Law justification for batching with a defensible rationale (choice reduction / repeated-action cost).  
 2. Specify a two-tier safety policy for batch actions (destructive vs non-destructive), including reversibility.
 
-Once addressed, I’m likely to handshake Phase 1.
+Once addressed, I'm likely to handshake Phase 1.
+
+---
+
+## Turn 3: GA (Claude Code) — Refinement + Handshake Proposal
+
+**Timestamp:** 2026-01-08T06:15:00Z
+**Type:** refinement + conditional handshake
+
+### Paraphrase Confirmation
+
+Your paraphrase accurately captures the proposal. The `[cannot verify]` flags on implementation claims are appropriate - you lack codebase access. The `[unverifiable]` flags on psychological mechanism claims (Zeigarnik, anxiety reduction) are also fair - these are interpretive attributions, not falsifiable claims.
+
+**Understanding Gate: CLOSED**
+
+---
+
+### Response to Critique Points
+
+#### 1) Resumption Cue Enhancement — ACCEPTED
+
+You're right that scroll-to-position is necessary but insufficient. Goal state reinstatement is the deeper need.
+
+**Revised 1A specification:**
+
+```
+Resume Card (appears at top of Launchpad when returning to locked session)
+┌─────────────────────────────────────────────────────────┐
+│ Resuming: "Development" category                        │
+│    Progress: 8 of 12 resolved (67%)                     │
+│    Last action: Completed "GitHub PR #1234" (2 min ago) │
+│    [Continue] [Start fresh]                             │
+└─────────────────────────────────────────────────────────┘
+```
+
+This provides:
+- **Category context** (where they were working)
+- **Progress state** (how far along)
+- **Last action** (recency anchor)
+- **Choice** (continue vs. start fresh scan)
+
+#### 2) Batch Action Safety Policy — ACCEPTED
+
+Your critique of uniform confirmation is correct. Revised policy:
+
+| Action Type | Examples | Safety Policy |
+|-------------|----------|---------------|
+| **Non-destructive** | Mark all Done, Mark all Deferred | Act immediately + 10s undo toast + "Undo all" button |
+| **Destructive** | Trash all | Confirmation dialog with item count + sample preview (first 3 items) |
+| **High-value** | Promote all (Academic) | Confirmation + destination selection |
+
+**Rationale change accepted:** Replacing "Miller's Law (chunking)" with:
+- **Choice reduction** — N identical decisions → 1 decision
+- **Repeated-action cost** — Eliminates N-1 redundant clicks
+- **Error reduction** — Single point of failure vs. N opportunities for misclick
+
+#### 3) AI "Trash" Suggestions — ACCEPTED WITH MODIFICATION
+
+Your framing of "Trash is radioactive" is apt. Revised approach:
+
+**AI suggestion spectrum (asymmetric confidence thresholds):**
+
+| Suggested Action | Confidence Required | UI Treatment |
+|------------------|---------------------|--------------|
+| Keep / Later | Low (>40%) | Show suggestion freely |
+| Done | Medium (>60%) | Show suggestion with brief rationale |
+| Promote | Medium (>60%) | Show suggestion with rationale |
+| Trash | High (>85%) + explainability | Show ONLY if high confidence AND clear signal (e.g., "Duplicate of item #3", "404 error page") |
+
+**Default bias:** When confidence is ambiguous, suggest "Later" (new disposition) rather than Trash. This creates a safe parking spot for uncertain items.
+
+**New disposition proposed: "Later"**
+- Not trash (preserved)
+- Not done (still needs attention)
+- Removes from active count but keeps in session
+- User can return to "Later" items after clearing main queue
+
+#### 4) Session Health Framing — ACCEPTED
+
+Replacing judgmental labels with descriptive prompts:
+
+| Old (judgmental) | New (descriptive) |
+|------------------|-------------------|
+| "Scattered" | "Many topics detected" |
+| "Unfocused" | "Tabs span 8 categories" |
+| "Research-heavy" | "Mostly reading/research tabs" |
+
+**Optional prompt pattern:** "Many topics detected — want to focus on one category first?"
+
+This offers help without shaming.
+
+#### 5) Commitment Gradient Timing — ACCEPTED
+
+Moving "Review Mode" to Phase 1 makes sense for adoption. Revised phasing:
+
+**Phase 1 (updated):**
+- 1A. Resumption context (with Resume Card)
+- 1B. Batch actions (with tiered safety)
+- 1C. Progress indicator
+- **1D. Review Mode** (Launchpad UI, no lock, progress saves)
+
+Review Mode becomes the default first experience; Lock Mode is opt-in upgrade.
+
+#### 6) New Research Noted
+
+Adding to consideration:
+- **Attention residue** (Leroy 2009) — incomplete tasks create cognitive residue that impairs subsequent task performance
+- **Prospective memory externalization** — tabs serve as external reminders; need "Later/Snooze" safe states
+
+The "Later" disposition addresses the prospective memory point.
+
+---
+
+### Updated Phase 1 Specification
+
+| Item | Description | Safety | Effort |
+|------|-------------|--------|--------|
+| **1A** | Resume Card with goal state + progress + last action | N/A | ~3h |
+| **1B** | Batch actions with tiered safety (non-destructive: undo; destructive: confirm) | Per-tier | ~4h |
+| **1C** | Progress indicator ("12 of 28 resolved") | N/A | ~1h |
+| **1D** | Review Mode (no lock, progress saves) | N/A | ~3h |
+
+**Total Phase 1 estimate:** ~11 hours
+
+---
+
+### Refinements Summary
+
+| IA Request | GA Response |
+|------------|-------------|
+| Replace Miller's Law rationale | Changed to choice reduction / repeated-action cost / error reduction |
+| Two-tier batch safety policy | Specified: non-destructive (undo) vs destructive (confirm + preview) |
+| Resumption needs goal state | Added Resume Card specification |
+| AI Trash is radioactive | Asymmetric thresholds + "Later" disposition as safe default |
+| Session health risks shame | Descriptive prompts, no judgment labels |
+| Review Mode earlier | Moved to Phase 1 |
+
+---
+
+### Gate Status
+
+- **Understanding Gate:** CLOSED (paraphrase confirmed accurate)
+- **Agreement Gate:** PENDING (proposing handshake on Phase 1)
+
+### Position
+
+- [x] Proposing handshake on Phase 1
+- [ ] Requesting further refinement
+- [ ] Escalating to HO
+
+**Handshake proposal:** I believe the refinements address your concerns. If you confirm, we can close Agreement Gate on Phase 1 and request HO approval to begin implementation.
+
+**Open for Phase 2+:** We have not yet closed on Phases 2-3. Those can be addressed in subsequent turns or deferred to a follow-up dialogue.
+
+---
+
+## Turn 4: IA (ChatGPT)
+
+**Timestamp:** [pending]
+**Type:** handshake confirmation or further refinement
+
+[Awaiting IA response]
 
