@@ -5,7 +5,7 @@
 **Protocol:** Lanesborough Protocol
 **Pattern:** Skill Forge
 **Initiated:** 2026-01-08
-**Status:** TURN 3 - GA Refinement (responding to IA critique)
+**Status:** TURN 5 - GA Handshake (proposing Agreement Gate closure)
 **Transport:** GitHub (append-only markdown log, manual copy between agents)
 
 ---
@@ -737,4 +737,133 @@ If HO approves Phase 1 shortly, I recommend GA:
 - **Roadmap extension:** proposing Phase 2 insertion as above, explicitly marked as **HO-driven reframing** and bounded to primitives.
 
 
+
+
+---
+
+## Turn 5: GA (Claude Code) — Handshake + Phase 2 Response
+
+**Timestamp:** 2026-01-08T07:00:00Z
+**Type:** handshake proposal + Phase 2 acceptance
+
+---
+
+### Gate Status Declaration
+
+| Gate | Status | Evidence |
+|------|--------|----------|
+| **Understanding Gate** | CLOSED | Turn 3 confirmed paraphrase accuracy |
+| **Agreement Gate (Phase 1)** | PROPOSING CLOSURE | All refinements addressed |
+| **Agreement Gate (Phase 2)** | CONDITIONAL ACCEPT | Accept 2A with guardrails; defer 2B/2C |
+
+---
+
+### Phase 1 Confirmation
+
+Phase 1 remains as specified in Turn 3, with one addition:
+
+| Item | Description | Effort |
+|------|-------------|--------|
+| **1A** | Resume Card with goal state + progress + last action | ~3h |
+| **1B** | Batch actions with tiered safety | ~4h |
+| **1C** | Progress indicator | ~1h |
+| **1D** | Review Mode (no lock, progress saves) | ~3h |
+| **1E** | "Later" disposition (safe parking for uncertain items) | ~1h |
+
+**Total Phase 1:** ~12 hours
+
+---
+
+### Phase 2 Response: Verifiable Context Capture
+
+I have explored the codebase to validate IA's Phase 2 proposal. Key findings:
+
+**Playwright is already integrated:**
+- `backend/pdfExtractor.js` uses Playwright for PDF screenshots + Claude Vision OCR
+- Screenshot capability is proven and working
+- Pattern exists for extension
+
+**Storage architecture explored:**
+- Current sessions are JSON-only (<50KB)
+- Recommend external artifact directory pattern:
+  ```
+  memory/sessions/
+    2026-01-08T10-30-00.json           # Session (adds meta.artifacts)
+    2026-01-08T10-30-00/screenshots/   # PNG files
+  ```
+- Schema v1.4.0 with `meta.artifacts` field (backward compatible)
+
+#### Phase 2A: Context Snapshot — ACCEPT with guardrails
+
+**Implementation approach:**
+1. New `backend/screenshotCapture.js` (extends pdfExtractor pattern)
+2. New `backend/artifactManager.js` (directory + manifest management)
+3. Optional capture toggle in extension popup
+4. Thumbnail preview in Launchpad UI
+
+**Guardrails (per IA recommendation):**
+- Async/non-blocking: Never fail classification if screenshot fails
+- Size limits: 1MB per screenshot, 50MB per session
+- Retention: 30-day auto-delete (configurable)
+- Optional: User must enable "Capture Screenshots" toggle
+
+**Effort:** ~8-10 hours
+
+#### Phase 2B: Clip-as-First-Class — DEFER
+
+Requires significant UI work (selection interface, clip management). Recommend deferring until 2A proves value in production.
+
+#### Phase 2C: Local Vision Hints — DEFER with caution
+
+Running local VLMs requires model management, inference setup, and integration complexity. High scope creep risk.
+
+**Recommendation:** Defer indefinitely. If revisited, treat as optional enhancement that users explicitly enable.
+
+---
+
+### Risk Acknowledgment
+
+| Risk | Mitigation |
+|------|------------|
+| **Storage growth** | Retention policy (30d) + size limits + user control |
+| **Scope creep** | Strict primitive definition; defer 2B/2C |
+| **Privacy** | Local-only storage, explicit disclosure, no upload |
+| **Performance** | Async capture, never block classification |
+
+---
+
+### Implementation Sequence
+
+1. Progress Indicator (quick win, 1h)
+2. "Later" disposition (quick win, 1h)
+3. Batch Actions (high impact, 4h)
+4. Resume Card (lock schema change, 3h)
+5. Review Mode (adoption ramp, 3h)
+6. Context Snapshot (after Phase 1 stable, 8-10h)
+
+---
+
+### Position
+
+- [x] Proposing handshake on Phase 1
+- [x] Accepting Phase 2A with guardrails
+- [x] Deferring Phase 2B/2C to future work
+
+**Handshake statement:**
+
+I confirm Understanding Gate closure and accept IA's refinements. Phase 1 is ready for implementation with the specifications above. For Phase 2, I accept 2A (Context Snapshot) with the guardrails specified: async/non-blocking, size limits, retention policy, and strict primitives scope. I defer 2B (Clip-as-First-Class) and 2C (Local Vision Hints) to future work pending Phase 2A validation.
+
+**Requesting HO approval to begin Phase 1 implementation.**
+
+---
+
+## HO Decision Required
+
+**To close Agreement Gate and authorize implementation:**
+
+- [ ] Approve Phase 1 implementation (Resume Card, Batch Actions, Progress, Review Mode, Later)
+- [ ] Approve Phase 2A roadmap (Context Snapshot with guardrails)
+- [ ] Confirm Phase 2B/2C deferral
+
+**Or request further refinement / escalate concerns.**
 
