@@ -92,8 +92,8 @@ app.post('/classifyAndRender', async (req, res) => {
     const context = requestContext || loadContext();
 
     const classification = await classifyTabs(processedTabs, engine, context, debugMode);
-    await saveSession(classification);
-    res.send(renderResultsPage(classification));
+    const sessionId = await saveSession(classification);
+    res.send(renderResultsPage(classification, sessionId));
   } catch (error) {
     console.error('Classification error:', error);
     res.status(500).send('<html><body><h1>Error: Classification failed</h1></body></html>');

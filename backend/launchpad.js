@@ -234,7 +234,7 @@ function renderLaunchpadPage(sessionId, sessionState) {
     .item-actions {
       display: flex;
       gap: 8px;
-      opacity: 0;
+      opacity: 0.7;
       transition: opacity 0.15s;
     }
 

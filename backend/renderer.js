@@ -234,7 +234,7 @@ function renderActionCards(suggestedActions) {
   `;
 }
 
-function renderResultsPage(data) {
+function renderResultsPage(data, sessionId = null) {
   const { narrative, groups, tasks, summary, timestamp, totalTabs, source, meta, deepDiveResults, deepDive, trace, thematicAnalysis } = data;
 
   const safeSource = source || 'unknown';
@@ -367,7 +367,7 @@ function renderResultsPage(data) {
     <ul class="tab-list">
       ${tabs.map(tab => {
         const r = reasoning[tab.tabIndex] || {};
-        const signals = r.signals || [];
+        const signals = Array.isArray(r.signals) ? r.signals : [];
         const confidence = r.confidence || 'unknown';
         const hasReasoning = signals.length > 0 || confidence !== 'unknown';
         const attribution = perTabAttribution[tab.tabIndex];
@@ -1048,6 +1048,39 @@ function renderResultsPage(data) {
     .btn-secondary:hover {
       background: #e8e8e0;
     }
+
+    /* Focus Mode button */
+    .focus-mode-btn {
+      background: linear-gradient(135deg, #4a4a4a 0%, #333 100%);
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      font-family: Palatino, Georgia, serif;
+      font-size: 0.95em;
+      border-radius: 4px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+      margin-top: 1em;
+    }
+    .focus-mode-btn:hover {
+      background: linear-gradient(135deg, #333 0%, #222 100%);
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    .focus-mode-btn:active {
+      transform: translateY(0);
+    }
+    .focus-mode-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .focus-mode-icon {
+      font-size: 1.1em;
+    }
   </style>
 </head>
 <body>
@@ -1060,6 +1093,57 @@ function renderResultsPage(data) {
       ${usage ? `<span>${(usage.totalInputTokens || 0).toLocaleString()} in / ${(usage.totalOutputTokens || 0).toLocaleString()} out</span>` : ''}
       ${cost ? `<span class="cost">$${cost.totalCost}</span>` : ''}
     </div>
+    ${sessionId ? `
+    <button id="focus-mode-btn" class="focus-mode-btn" onclick="enterFocusMode()">
+      <span class="focus-mode-icon">&#9881;</span>
+      Enter Focus Mode
+    </button>
+    <script>
+      const BACKEND_URL = 'http://localhost:3000';
+      const SESSION_ID = '${escapeHtml(sessionId)}';
+      const TOTAL_ITEMS = ${totalTabs};
+
+      async function enterFocusMode() {
+        const btn = document.getElementById('focus-mode-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="focus-mode-icon">&#8987;</span> Acquiring lock...';
+
+        try {
+          // First check if already locked
+          const statusRes = await fetch(BACKEND_URL + '/api/lock-status');
+          const status = await statusRes.json();
+
+          if (status.locked && status.sessionId !== SESSION_ID) {
+            alert('Another session is already in Focus Mode.\\n\\nSession: ' + status.sessionId + '\\nItems remaining: ' + status.itemsRemaining + '\\n\\nPlease complete that session first.');
+            btn.disabled = false;
+            btn.innerHTML = '<span class="focus-mode-icon">&#9881;</span> Enter Focus Mode';
+            return;
+          }
+
+          // Acquire lock for this session
+          const lockRes = await fetch(BACKEND_URL + '/api/acquire-lock', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: SESSION_ID, itemsRemaining: TOTAL_ITEMS })
+          });
+          const lockResult = await lockRes.json();
+
+          if (lockResult.success) {
+            // Redirect to Launchpad
+            window.location.href = BACKEND_URL + '/launchpad/' + SESSION_ID;
+          } else {
+            alert('Could not acquire lock: ' + (lockResult.message || 'Unknown error'));
+            btn.disabled = false;
+            btn.innerHTML = '<span class="focus-mode-icon">&#9881;</span> Enter Focus Mode';
+          }
+        } catch (err) {
+          alert('Error connecting to backend: ' + err.message);
+          btn.disabled = false;
+          btn.innerHTML = '<span class="focus-mode-icon">&#9881;</span> Enter Focus Mode';
+        }
+      }
+    </script>
+    ` : ''}
   </header>
 
   <p class="summary">${escapeHtml(narrative)}</p>
