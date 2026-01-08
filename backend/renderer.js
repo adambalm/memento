@@ -1094,7 +1094,7 @@ function renderResultsPage(data, sessionId = null) {
       ${cost ? `<span class="cost">$${cost.totalCost}</span>` : ''}
     </div>
     ${sessionId ? `
-    <button id="focus-mode-btn" class="focus-mode-btn" onclick="window.location.href='http://localhost:3000/launchpad/${escapeHtml(sessionId)}'">
+    <button id="focus-mode-btn" class="focus-mode-btn" onclick="window.open('http://localhost:3000/launchpad/${escapeHtml(sessionId)}', '_blank')">
       Launchpad
     </button>
     ` : ''}
