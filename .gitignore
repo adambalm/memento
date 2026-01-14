@@ -15,3 +15,4 @@ screenshot-*.png
 tests/*.png
 tests/preview.html
 nul
+tmpclaude-*
