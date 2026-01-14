@@ -21,6 +21,9 @@ const { listSessions, readSession, getLatestSession, searchSessions } = require(
 const { loadContext, saveContext } = require('./contextLoader');
 const { reclassifySession } = require('./mcp/reclassify');
 const { getLockStatus, clearLock } = require('./lockManager');
+const { getRecurringUnfinished, getProjectHealth, getDistractionSignature } = require('./longitudinal');
+const aggregator = require('./aggregator');
+const attentionSync = require('./attention-sync');
 
 // Create the MCP server
 const server = new McpServer({
@@ -231,6 +234,130 @@ server.tool(
         text: JSON.stringify(result, null, 2)
       }],
       isError: !result.success
+    };
+  }
+);
+
+// === LONGITUDINAL ANALYSIS TOOLS ===
+// Cross-dimensional queries on the Attention Data Cube
+// See: plans/clever-snacking-boole.md for design context
+
+server.tool(
+  'longitudinal_stats',
+  'Get aggregate statistics across all sessions (total sessions, tabs, unique URLs, categories, date range)',
+  {},
+  async () => {
+    const stats = await aggregator.getStats();
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify(stats, null, 2)
+      }]
+    };
+  }
+);
+
+server.tool(
+  'longitudinal_recurring_unfinished',
+  'Find tabs that appear in 2+ sessions but never get completed. Reveals persistent unfinished work.',
+  {
+    minOccurrences: z.number().default(2).describe('Minimum number of appearances (default: 2)'),
+    timeRange: z.string().default('all').describe('ISO date range "start/end" or "all" (default: all)')
+  },
+  async ({ minOccurrences, timeRange }) => {
+    const results = await getRecurringUnfinished({ minOccurrences, timeRange });
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          query: 'recurring_unfinished',
+          params: { minOccurrences, timeRange },
+          count: results.length,
+          results: results.slice(0, 20) // Limit to top 20
+        }, null, 2)
+      }]
+    };
+  }
+);
+
+server.tool(
+  'longitudinal_project_health',
+  'Get health status of all tracked projects. Shows active, cooling, neglected, and abandoned projects.',
+  {
+    includeAbandoned: z.boolean().default(true).describe('Include projects >30 days inactive (default: true)')
+  },
+  async ({ includeAbandoned }) => {
+    const results = await getProjectHealth({ includeAbandoned });
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          query: 'project_health',
+          params: { includeAbandoned },
+          count: results.length,
+          results
+        }, null, 2)
+      }]
+    };
+  }
+);
+
+server.tool(
+  'longitudinal_distraction_signature',
+  'Identify distraction patterns: top distraction domains, time-of-day vulnerability, mode correlation.',
+  {
+    timeRange: z.string().default('all').describe('ISO date range "start/end" or "all" (default: all)'),
+    modeFilter: z.string().optional().describe('Filter to specific mode (research-heavy, output-focused, etc.)')
+  },
+  async ({ timeRange, modeFilter }) => {
+    const results = await getDistractionSignature({ timeRange, modeFilter });
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          query: 'distraction_signature',
+          params: { timeRange, modeFilter },
+          results
+        }, null, 2)
+      }]
+    };
+  }
+);
+
+server.tool(
+  'sync_attention_to_memory',
+  'Generate attention insights as markdown notes for basic-memory. Returns { title, folder, content, tags } that can be passed to basic-memory write_note.',
+  {
+    report: z.enum(['weekly', 'project_health', 'recurring', 'distraction', 'all']).describe('Which report to generate'),
+    weekId: z.string().optional().describe('Week ID for weekly summary (e.g., 2026-W02). Defaults to current week.')
+  },
+  async ({ report, weekId }) => {
+    const results = [];
+
+    if (report === 'weekly' || report === 'all') {
+      results.push(await attentionSync.generateWeeklySummary(weekId));
+    }
+    if (report === 'project_health' || report === 'all') {
+      results.push(await attentionSync.generateProjectHealthReport());
+    }
+    if (report === 'recurring' || report === 'all') {
+      results.push(await attentionSync.generateRecurringUnfinished());
+    }
+    if (report === 'distraction' || report === 'all') {
+      results.push(await attentionSync.generateDistractionSignature());
+    }
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          action: 'sync_attention_to_memory',
+          report,
+          noteCount: results.length,
+          notes: results,
+          instructions: 'Pass each note to basic-memory write_note with: title, folder, content, tags'
+        }, null, 2)
+      }]
     };
   }
 );
