@@ -24,6 +24,7 @@ const { getLockStatus, clearLock } = require('./lockManager');
 const { getRecurringUnfinished, getProjectHealth, getDistractionSignature } = require('./longitudinal');
 const aggregator = require('./aggregator');
 const attentionSync = require('./attention-sync');
+const correctionAnalyzer = require('./correctionAnalyzer');
 
 // Create the MCP server
 const server = new McpServer({
@@ -357,6 +358,91 @@ server.tool(
           notes: results,
           instructions: 'Pass each note to basic-memory write_note with: title, folder, content, tags'
         }, null, 2)
+      }]
+    };
+  }
+);
+
+// === CORRECTION ANALYSIS TOOLS ===
+// Learn from user corrections to improve classification
+// See: correctionAnalyzer.js
+
+server.tool(
+  'correction_stats',
+  'Get summary statistics about user corrections (regroup actions). Shows how often AI classifications are corrected and common patterns.',
+  {},
+  async () => {
+    const stats = await correctionAnalyzer.getCorrectionStats();
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify(stats, null, 2)
+      }]
+    };
+  }
+);
+
+server.tool(
+  'correction_suggestions',
+  'Get suggestions for domains that need better content extractors based on user correction patterns.',
+  {
+    minCorrections: z.number().default(2).describe('Minimum corrections to flag (default: 2)'),
+    minRate: z.number().default(0.3).describe('Minimum correction rate to flag (default: 0.3 = 30%)')
+  },
+  async ({ minCorrections, minRate }) => {
+    const suggestions = await correctionAnalyzer.suggestExtractors(minCorrections, minRate);
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          query: 'correction_suggestions',
+          params: { minCorrections, minRate },
+          count: suggestions.length,
+          suggestions
+        }, null, 2)
+      }]
+    };
+  }
+);
+
+server.tool(
+  'add_extractor',
+  'Add a domain to the extractors config for better content extraction.',
+  {
+    domain: z.string().describe('Domain name (e.g., arxiv.org)'),
+    selectors: z.array(z.string()).optional().describe('CSS selectors for content extraction'),
+    expectedCategory: z.string().optional().describe('Expected category for this domain (if consistent)'),
+    notes: z.string().optional().describe('Notes about extraction strategy')
+  },
+  async ({ domain, selectors, expectedCategory, notes }) => {
+    const result = await correctionAnalyzer.addExtractor(domain, {
+      selectors,
+      expectedCategory,
+      notes
+    });
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          success: true,
+          message: `Added extractor for ${domain}`,
+          extractors: result
+        }, null, 2)
+      }]
+    };
+  }
+);
+
+server.tool(
+  'get_extractors',
+  'Get the current domain extractors configuration.',
+  {},
+  async () => {
+    const extractors = await correctionAnalyzer.loadExtractors();
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify(extractors, null, 2)
       }]
     };
   }
