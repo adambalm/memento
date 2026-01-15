@@ -26,8 +26,8 @@ async function getMirrorInsight() {
       insights.push({
         type: 'ghost_tab',
         severity: ghost.timesSeen >= 10 ? 'high' : ghost.timesSeen >= 5 ? 'medium' : 'low',
-        headline: `You've opened this ${ghost.timesSeen} times.`,
-        subhead: `You've never finished it.`,
+        headline: `This keeps coming back.`,
+        subhead: `${ghost.timesSeen} visits. Still unresolved.`,
         detail: truncate(ghost.title, 80),
         url: ghost.url,
         meta: {
@@ -55,7 +55,7 @@ async function getMirrorInsight() {
         type: 'abandoned_project',
         severity: abandoned.daysSinceActive >= 30 ? 'high' : 'medium',
         headline: `${abandoned.project}`,
-        subhead: `You cared about this ${abandoned.daysSinceActive} days ago. Do you still?`,
+        subhead: `${abandoned.daysSinceActive} days quiet. Ready to pick it back up?`,
         detail: `Last active: ${abandoned.lastActive?.split('T')[0]}`,
         meta: {
           lastActive: abandoned.lastActive,

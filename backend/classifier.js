@@ -720,22 +720,95 @@ CRITICAL:
 }
 
 /**
- * Run thematic analysis (Pass 4) - conditional on having active projects
+ * Build a simplified thematic prompt when no projects are defined
+ * Focuses on finding hidden connections and alternative perspectives
+ */
+function buildSimplifiedThematicPrompt(result, tabs, deepDiveResults) {
+  // Build category summary
+  const categorySummary = Object.entries(result.groups)
+    .map(([cat, catTabs]) => `${cat}: tabs ${catTabs.map(t => t.tabIndex).join(', ')}`)
+    .join('\n');
+
+  // Build deep dive summary
+  const deepDiveSummary = deepDiveResults?.length > 0
+    ? deepDiveResults.map(d => {
+        if (d.analysis) {
+          return `Tab "${d.title}": ${d.analysis.summary || 'analyzed'}`;
+        }
+        return `Tab "${d.title}": (analysis failed)`;
+      }).join('\n')
+    : 'None';
+
+  // Build tab list with titles
+  const tabList = tabs.map((t, i) =>
+    `${i + 1}. ${t.title || 'Untitled'} | ${t.url || 'unknown'}`
+  ).join('\n');
+
+  return `You are analyzing a browsing session to find hidden connections and alternative perspectives.
+
+SESSION CLASSIFICATION:
+Narrative: ${result.narrative}
+
+Categories:
+${categorySummary}
+
+DEEP ANALYSIS:
+${deepDiveSummary}
+
+TAB LIST:
+${tabList}
+
+TASK:
+1. Look for HIDDEN CONNECTIONS between tabs that the categories might miss
+   - What themes connect tabs across different categories?
+   - What story might these tabs tell together?
+2. Provide an alternative perspective on what this session is really about
+3. Identify the overall session pattern
+
+OUTPUT FORMAT - respond with ONLY this JSON (no markdown, no explanation):
+{
+  "thematicThroughlines": [
+    {
+      "theme": "Theme name",
+      "tabs": [9, 15, 17],
+      "insight": "Why these connect - what they reveal together"
+    }
+  ],
+  "alternativeNarrative": "1-2 sentences reframing the session. What might you be ACTUALLY working toward, even if you don't realize it?",
+  "hiddenConnection": "One surprising connection between seemingly unrelated tabs",
+  "sessionPattern": {
+    "type": "research-heavy|output-focused|balanced|scattered|exploratory",
+    "observation": "What this browsing pattern suggests about your current state",
+    "recommendation": "One sentence on what to consider"
+  }
+}
+
+CRITICAL:
+- Look for what's NOT obvious from the categories
+- Find the implicit thread connecting disparate tabs
+- Be insightful, not just descriptive`;
+}
+
+/**
+ * Run thematic analysis (Pass 4) - now runs always, simplified mode without projects
  * @param {Object} result - Classification result from Passes 1-3
  * @param {Array} tabs - Original tab array
  * @param {Object|null} context - Context with activeProjects
  * @param {string} engine - LLM engine to use
  * @param {boolean} debugMode - If true, include prompt and raw response
- * @returns {Object} Thematic analysis result or null if skipped
+ * @returns {Object} Thematic analysis result
  */
 async function analyzeThematicRelationships(result, tabs, context, engine, debugMode = false) {
-  // Only run if there are active projects
-  if (!context || !context.activeProjects || context.activeProjects.length === 0) {
-    console.error('[Pass 4] Skipped - no active projects in context');
-    return null;
-  }
+  const hasProjects = context?.activeProjects?.length > 0;
 
-  const prompt = buildThematicPrompt(result, tabs, context, result.deepDiveResults);
+  // Use full prompt with projects, or simplified prompt without
+  const prompt = hasProjects
+    ? buildThematicPrompt(result, tabs, context, result.deepDiveResults)
+    : buildSimplifiedThematicPrompt(result, tabs, result.deepDiveResults);
+
+  if (!hasProjects) {
+    console.error('[Pass 4] Running in simplified mode (no projects defined)');
+  }
 
   try {
     const response = await runModel(engine, prompt);
@@ -763,6 +836,7 @@ async function analyzeThematicRelationships(result, tabs, context, engine, debug
       projectSupport: parsed.projectSupport || {},
       thematicThroughlines: Array.isArray(parsed.thematicThroughlines) ? parsed.thematicThroughlines : [],
       alternativeNarrative: parsed.alternativeNarrative || null,
+      hiddenConnection: parsed.hiddenConnection || null,
       suggestedActions: Array.isArray(parsed.suggestedActions) ? parsed.suggestedActions : [],
       sessionPattern: parsed.sessionPattern || null
     };
@@ -783,6 +857,7 @@ async function analyzeThematicRelationships(result, tabs, context, engine, debug
       projectSupport: {},
       thematicThroughlines: [],
       alternativeNarrative: null,
+      hiddenConnection: null,
       suggestedActions: [],
       sessionPattern: null
     };

@@ -249,8 +249,8 @@ async function classifySession(tabs, engine, debugMode, mode) {
 
     return { sessionId, totalTabs: classification.totalTabs };
   } else {
-    // Results mode: get HTML back
-    const response = await fetch(`${BACKEND_URL}/classifyAndRender`, {
+    // Results mode: get JSON, return session ID (opens localhost URL for proper Mermaid rendering)
+    const response = await fetch(`${BACKEND_URL}/classifyBrowserContext`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tabs, engine, debugMode })
@@ -260,7 +260,10 @@ async function classifySession(tabs, engine, debugMode, mode) {
       throw new Error(`Backend error: ${response.status}`);
     }
 
-    return { html: await response.text() };
+    const classification = await response.json();
+    const sessionId = classification.meta?.sessionId || classification.timestamp?.replace(/:/g, '-').replace(/\.\d{3}Z$/, '');
+
+    return { sessionId, totalTabs: classification.totalTabs };
   }
 }
 
@@ -315,17 +318,9 @@ async function captureSession() {
       await chrome.tabs.create({ url: `${BACKEND_URL}/launchpad/${result.sessionId}` });
       setStatus(`Captured ${result.totalTabs} tabs → Launchpad`);
     } else {
-      // Results mode: open blob URL
-      // Extract and log classifier source from HTML comment
-      const sourceMatch = result.html?.match(/<!-- MEMENTO_SOURCE:(\w+):?(.*?) -->/);
-      const classifierSource = sourceMatch ? sourceMatch[1] : 'unknown';
-      const classifierModel = sourceMatch && sourceMatch[2] ? sourceMatch[2] : null;
-      console.log(`[Memento] Classification source: ${classifierSource}${classifierModel ? ` (${classifierModel})` : ''}`);
-
-      const blob = new Blob([result.html], { type: 'text/html' });
-      const blobUrl = URL.createObjectURL(blob);
-      await chrome.tabs.create({ url: blobUrl });
-      setStatus(`Captured ${tabs.length} tabs!`);
+      // Results mode: open localhost URL (enables Mermaid CDN loading)
+      await chrome.tabs.create({ url: `${BACKEND_URL}/results/${result.sessionId}` });
+      setStatus(`Captured ${result.totalTabs} tabs!`);
     }
   } catch (error) {
     clearTimeout(timeoutId);

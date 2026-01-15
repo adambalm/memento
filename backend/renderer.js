@@ -117,7 +117,7 @@ function renderTabAttribution(tabIndex, attribution) {
 function renderThematicAnalysis(thematicAnalysis) {
   if (!thematicAnalysis) return '';
 
-  const { projectSupport, thematicThroughlines, alternativeNarrative, sessionPattern } = thematicAnalysis;
+  const { projectSupport, thematicThroughlines, alternativeNarrative, hiddenConnection, sessionPattern } = thematicAnalysis;
 
   // Project support section
   const projectSupportHtml = Object.keys(projectSupport || {}).length > 0 ? `
@@ -184,10 +184,19 @@ function renderThematicAnalysis(thematicAnalysis) {
     </div>
   ` : '';
 
+  // Hidden connection - "Something You Might Not See"
+  const hiddenConnectionHtml = hiddenConnection ? `
+    <div class="hidden-connection">
+      <h3>Something You Might Not See</h3>
+      <p>${escapeHtml(hiddenConnection)}</p>
+    </div>
+  ` : '';
+
   return `
     <section class="thematic-section">
       <h2>Thematic Analysis</h2>
       ${altNarrativeHtml}
+      ${hiddenConnectionHtml}
       ${projectSupportHtml}
       ${throughlinesHtml}
       ${sessionPatternHtml}
@@ -337,7 +346,7 @@ function renderResultsPage(data, sessionId = null, mirrorInsight = null) {
       ${deepDiveResults && deepDiveResults.length > 0 ? `
         <div class="flow-stage">
           <h3>Pass 2 — Deep Analysis</h3>
-          <p class="flow-desc">Each flagged tab was analyzed with its full content. Extracted summaries, key points, and entities.</p>
+          <p class="flow-desc">Tabs that looked important got a closer read to understand what they're really about.</p>
           <div class="deep-dive-trace">
             ${deepDiveResults.map((dive, i) => `
               <div class="dive-trace-item ${dive.error ? 'failed' : ''}">
@@ -346,10 +355,9 @@ function renderResultsPage(data, sessionId = null, mirrorInsight = null) {
                   <p class="trace-title">${escapeHtml(dive.title || 'Unknown')}</p>
                   ${dive.analysis ? `
                     <p class="trace-result">
-                      ${dive.analysis.keyPoints ? `${dive.analysis.keyPoints.length} key points` : ''}
-                      ${dive.analysis.entities ? `, entities: ${Object.values(dive.analysis.entities).flat().filter(e => e).length}` : ''}
+                      ${dive.analysis.summary ? escapeHtml(dive.analysis.summary.substring(0, 100)) + '...' : 'Analyzed content'}
                     </p>
-                  ` : `<p class="trace-error">Failed: ${escapeHtml(dive.error || 'unknown error')}</p>`}
+                  ` : `<p class="trace-error">Couldn't read this page</p>`}
                 </div>
               </div>
             `).join('')}
@@ -944,6 +952,22 @@ function renderResultsPage(data, sessionId = null, mirrorInsight = null) {
       color: #856404;
     }
     .alternative-narrative p {
+      margin: 0;
+      font-style: italic;
+    }
+    .hidden-connection {
+      background: #e8f4f8;
+      padding: 1em;
+      margin-bottom: 1.5em;
+      border-left: 4px solid #5bc0de;
+      border-radius: 0 4px 4px 0;
+    }
+    .hidden-connection h3 {
+      margin-top: 0;
+      font-size: 1em;
+      color: #31708f;
+    }
+    .hidden-connection p {
       margin: 0;
       font-style: italic;
     }
