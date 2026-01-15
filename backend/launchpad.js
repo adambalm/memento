@@ -384,6 +384,23 @@ function renderLaunchpadPage(sessionId, sessionState, lockStatus = {}, reviewMod
       pointer-events: auto;
     }
 
+    .dev-clear-btn {
+      margin-left: 12px;
+      padding: 4px 8px;
+      background: transparent;
+      color: #f59e0b;
+      border: 1px solid #f59e0b;
+      border-radius: 4px;
+      font-size: 11px;
+      cursor: pointer;
+      opacity: 0.6;
+      transition: opacity 0.2s;
+    }
+    .dev-clear-btn:hover {
+      opacity: 1;
+      background: rgba(245, 158, 11, 0.1);
+    }
+
     .clear-lock-btn.enabled:hover {
       background: #059669;
     }
@@ -741,6 +758,9 @@ function renderLaunchpadPage(sessionId, sessionState, lockStatus = {}, reviewMod
   <div class="footer">
     <div class="footer-info">
       Session: ${sessionId}
+      <button class="dev-clear-btn" onclick="forceClearLock()" title="Development only: Force clear lock without resolving all items">
+        Force Clear Lock (Dev)
+      </button>
     </div>
     <button id="clear-lock-btn" class="clear-lock-btn ${unresolvedCount === 0 ? 'enabled' : ''}"
             onclick="clearLock()" ${unresolvedCount > 0 ? 'disabled' : ''}>
@@ -919,6 +939,30 @@ function renderLaunchpadPage(sessionId, sessionState, lockStatus = {}, reviewMod
           setTimeout(() => {
             window.close();
           }, 1500);
+        } else {
+          showToast(result.message || 'Failed to clear lock', 'error');
+        }
+      } catch (error) {
+        showToast('Error: ' + error.message, 'error');
+      }
+    }
+
+    // Development helper: Force clear lock without resolving all items
+    async function forceClearLock() {
+      if (!confirm('Force clear the lock? This is for development only.')) return;
+
+      try {
+        const response = await fetch('/api/lock/force-clear', {
+          method: 'POST'
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          showToast('Lock force-cleared (dev mode)', 'success');
+          setTimeout(() => {
+            window.location.reload();
+          }, 1000);
         } else {
           showToast(result.message || 'Failed to clear lock', 'error');
         }

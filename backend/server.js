@@ -9,6 +9,7 @@ const { processVisualExtractionTabs } = require('./pdfExtractor');
 const { renderLaunchpadPage } = require('./launchpad');
 const { appendDisposition, appendBatchDisposition, getSessionWithDispositions } = require('./dispositions');
 const { getLockStatus, clearLock, acquireLock, updateResumeState } = require('./lockManager');
+const { getMirrorInsight } = require('./mirror');
 
 const app = express();
 const PORT = 3000;
@@ -76,7 +77,9 @@ app.get('/results/:sessionId', async (req, res) => {
     if (!sessionData) {
       return res.status(404).send('<html><body><h1>Session not found</h1></body></html>');
     }
-    res.send(renderResultsPage(sessionData, sessionId));
+    // Get mirror insight for confrontational reflection
+    const mirrorInsight = await getMirrorInsight();
+    res.send(renderResultsPage(sessionData, sessionId, mirrorInsight));
   } catch (error) {
     console.error('Results view error:', error);
     res.status(500).send('<html><body><h1>Error loading results</h1></body></html>');
@@ -108,7 +111,9 @@ app.post('/classifyAndRender', async (req, res) => {
 
     const classification = await classifyTabs(processedTabs, engine, context, debugMode);
     const sessionId = await saveSession(classification);
-    res.send(renderResultsPage(classification, sessionId));
+    // Get mirror insight for confrontational reflection
+    const mirrorInsight = await getMirrorInsight();
+    res.send(renderResultsPage(classification, sessionId, mirrorInsight));
   } catch (error) {
     console.error('Classification error:', error);
     res.status(500).send('<html><body><h1>Error: Classification failed</h1></body></html>');

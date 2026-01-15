@@ -3,6 +3,7 @@
  * Design: Tufte-inspired readability + reasoning flow transparency
  * v1.1: Cognitive debugging trace panels for inspecting prompts and responses
  * v1.2: Mermaid visualization of session structure (Pass 3)
+ * v1.3: Mirror insight - confrontational attention reflection
  */
 
 function escapeHtml(text) {
@@ -258,7 +259,44 @@ function renderVisualization(visualization) {
   `;
 }
 
-function renderResultsPage(data, sessionId = null) {
+/**
+ * Render the Mirror insight section
+ * Confrontational, single-insight view
+ * "Don't show data. Provoke reflection."
+ */
+function renderMirrorSection(mirrorInsight) {
+  if (!mirrorInsight) return '';
+
+  const severityClass = mirrorInsight.severity || 'medium';
+
+  return `
+    <section class="mirror-section mirror-${severityClass}">
+      <div class="mirror-content">
+        <p class="mirror-headline">"${escapeHtml(mirrorInsight.headline)}</p>
+        <p class="mirror-subhead">${escapeHtml(mirrorInsight.subhead)}"</p>
+        ${mirrorInsight.detail ? `
+          <p class="mirror-detail">${mirrorInsight.url ?
+            `<a href="${escapeHtml(mirrorInsight.url)}" target="_blank">${escapeHtml(mirrorInsight.detail)}</a>` :
+            escapeHtml(mirrorInsight.detail)
+          }</p>
+        ` : ''}
+        ${mirrorInsight.actions && mirrorInsight.actions.length > 0 ? `
+          <div class="mirror-actions">
+            ${mirrorInsight.actions.map(action => `
+              <button class="mirror-btn mirror-btn-${action.action}"
+                      onclick="alert('Action: ${escapeHtml(action.action)}\\n\\nThis would mark this item as ${escapeHtml(action.action)}. Coming soon.')">
+                ${action.icon ? `<span class="mirror-btn-icon">${action.icon}</span>` : ''}
+                ${escapeHtml(action.label)}
+              </button>
+            `).join('')}
+          </div>
+        ` : ''}
+      </div>
+    </section>
+  `;
+}
+
+function renderResultsPage(data, sessionId = null, mirrorInsight = null) {
   const { narrative, groups, tasks, summary, timestamp, totalTabs, source, meta, deepDiveResults, deepDive, trace, thematicAnalysis, visualization } = data;
 
   const safeSource = source || 'unknown';
@@ -1106,6 +1144,97 @@ function renderResultsPage(data, sessionId = null) {
       font-size: 1.1em;
     }
 
+    /* Mirror Insight Section - Confrontational Reflection */
+    .mirror-section {
+      background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+      color: #f5f5f5;
+      padding: 3em 2em;
+      margin: 0 -2em 2em -2em;
+      text-align: center;
+    }
+    .mirror-section.mirror-high {
+      background: linear-gradient(135deg, #1a0000 0%, #3d1515 100%);
+    }
+    .mirror-section.mirror-medium {
+      background: linear-gradient(135deg, #1a1a00 0%, #3d3515 100%);
+    }
+    .mirror-section.mirror-low {
+      background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+    }
+    .mirror-content {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    .mirror-headline {
+      font-size: 1.8em;
+      font-weight: 300;
+      margin: 0;
+      letter-spacing: 0.02em;
+      line-height: 1.3;
+    }
+    .mirror-subhead {
+      font-size: 1.8em;
+      font-weight: 300;
+      margin: 0.2em 0 0.8em 0;
+      opacity: 0.9;
+      letter-spacing: 0.02em;
+    }
+    .mirror-detail {
+      font-size: 1em;
+      opacity: 0.7;
+      margin: 1em 0;
+      font-style: italic;
+    }
+    .mirror-detail a {
+      color: #a0c4ff;
+      text-decoration: none;
+    }
+    .mirror-detail a:hover {
+      text-decoration: underline;
+    }
+    .mirror-actions {
+      display: flex;
+      justify-content: center;
+      gap: 1.5em;
+      margin-top: 2em;
+    }
+    .mirror-btn {
+      font-family: inherit;
+      font-size: 1.1em;
+      padding: 0.8em 2em;
+      border: 2px solid rgba(255,255,255,0.3);
+      background: transparent;
+      color: #f5f5f5;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 0.5em;
+    }
+    .mirror-btn:hover {
+      background: rgba(255,255,255,0.1);
+      border-color: rgba(255,255,255,0.5);
+      transform: translateY(-2px);
+    }
+    .mirror-btn-complete, .mirror-btn-revive {
+      border-color: rgba(100,200,100,0.5);
+    }
+    .mirror-btn-complete:hover, .mirror-btn-revive:hover {
+      background: rgba(100,200,100,0.2);
+      border-color: rgba(100,200,100,0.8);
+    }
+    .mirror-btn-trash, .mirror-btn-archive {
+      border-color: rgba(200,100,100,0.5);
+    }
+    .mirror-btn-trash:hover, .mirror-btn-archive:hover {
+      background: rgba(200,100,100,0.2);
+      border-color: rgba(200,100,100,0.8);
+    }
+    .mirror-btn-icon {
+      font-size: 1.2em;
+    }
+
     /* Session Visualization (Mermaid) */
     .visualization-section {
       background: linear-gradient(135deg, #f0f4f8 0%, #e8eef5 100%);
@@ -1146,12 +1275,15 @@ function renderResultsPage(data, sessionId = null) {
       margin: 0;
     }
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      if (typeof mermaid !== 'undefined') {
+    // Mermaid initialization - must wait for both script AND DOM
+    var mermaidReady = false;
+    var domReady = false;
+
+    function tryInitMermaid() {
+      if (mermaidReady && domReady && typeof mermaid !== 'undefined') {
         mermaid.initialize({
-          startOnLoad: true,
+          startOnLoad: false,
           theme: 'neutral',
           securityLevel: 'loose',
           flowchart: {
@@ -1160,9 +1292,21 @@ function renderResultsPage(data, sessionId = null) {
             curve: 'basis'
           }
         });
+        mermaid.run({ nodes: document.querySelectorAll('.mermaid') });
       }
+    }
+
+    function onMermaidLoad() {
+      mermaidReady = true;
+      tryInitMermaid();
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      domReady = true;
+      tryInitMermaid();
     });
   </script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js" onload="onMermaidLoad()"></script>
 </head>
 <body>
   <header>
@@ -1180,6 +1324,8 @@ function renderResultsPage(data, sessionId = null) {
     </button>
     ` : ''}
   </header>
+
+  ${renderMirrorSection(mirrorInsight)}
 
   <p class="summary">${escapeHtml(narrative)}</p>
 
