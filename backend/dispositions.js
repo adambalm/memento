@@ -379,10 +379,147 @@ async function appendBatchDisposition(sessionId, dispositions) {
   }
 }
 
+/**
+ * Get the full session data with dispositions applied.
+ *
+ * Returns the complete session object with groups reorganized
+ * according to user dispositions (regroups, trashes, completions).
+ *
+ * @param {string} sessionId - Session ID
+ * @returns {Promise<Object|null>} Full session with modified groups, or null if not found
+ */
+async function getSessionWithDispositionsApplied(sessionId) {
+  try {
+    const filepath = sessionPath(sessionId);
+    const content = await fs.readFile(filepath, 'utf-8');
+    const session = JSON.parse(content);
+
+    const dispositions = session.dispositions || [];
+    if (dispositions.length === 0) {
+      // No dispositions, return as-is with disposition metadata
+      return {
+        ...session,
+        _dispositions: {
+          count: 0,
+          trashedCount: 0,
+          completedCount: 0,
+          regroupedCount: 0
+        }
+      };
+    }
+
+    // Build item state map
+    const itemStates = new Map(); // itemId -> { status, currentCategory }
+    const groups = session.groups || {};
+
+    // Initialize from original groups (object format)
+    for (const [category, items] of Object.entries(groups)) {
+      for (const item of (items || [])) {
+        const itemId = item.url || `tab-${item.tabIndex}`;
+        itemStates.set(itemId, {
+          status: 'pending',
+          originalCategory: category,
+          currentCategory: category,
+          item
+        });
+      }
+    }
+
+    // Apply dispositions
+    let trashedCount = 0;
+    let completedCount = 0;
+    let regroupedCount = 0;
+
+    for (const disp of dispositions) {
+      const state = itemStates.get(disp.itemId);
+      if (!state) continue;
+
+      switch (disp.action) {
+        case 'trash':
+          state.status = 'trashed';
+          trashedCount++;
+          break;
+        case 'complete':
+          state.status = 'completed';
+          completedCount++;
+          break;
+        case 'regroup':
+          state.currentCategory = disp.to;
+          state.regroupedFrom = disp.from;
+          regroupedCount++;
+          break;
+        case 'later':
+          state.status = 'later';
+          break;
+        case 'defer':
+          state.status = 'deferred';
+          break;
+        case 'undo':
+          state.status = 'pending';
+          // If it was a regroup undo, restore original category
+          if (disp.undoes === 'regroup') {
+            state.currentCategory = state.originalCategory;
+            delete state.regroupedFrom;
+          }
+          break;
+      }
+
+      itemStates.set(disp.itemId, state);
+    }
+
+    // Rebuild groups based on current state
+    const newGroups = {};
+    const trashedItems = [];
+    const completedItems = [];
+    const laterItems = [];
+
+    for (const [itemId, state] of itemStates) {
+      if (state.status === 'trashed') {
+        trashedItems.push({ ...state.item, _dispositionStatus: 'trashed' });
+      } else if (state.status === 'completed') {
+        completedItems.push({ ...state.item, _dispositionStatus: 'completed' });
+      } else if (state.status === 'later') {
+        laterItems.push({ ...state.item, _dispositionStatus: 'later' });
+      } else {
+        // Active item - put in current category
+        const cat = state.currentCategory;
+        if (!newGroups[cat]) newGroups[cat] = [];
+        const itemWithMeta = { ...state.item };
+        if (state.regroupedFrom) {
+          itemWithMeta._regroupedFrom = state.regroupedFrom;
+        }
+        newGroups[cat].push(itemWithMeta);
+      }
+    }
+
+    return {
+      ...session,
+      groups: newGroups,
+      _trashedItems: trashedItems,
+      _completedItems: completedItems,
+      _laterItems: laterItems,
+      _dispositions: {
+        count: dispositions.length,
+        trashedCount,
+        completedCount,
+        regroupedCount,
+        laterCount: laterItems.length
+      }
+    };
+
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return null;
+    }
+    throw error;
+  }
+}
+
 module.exports = {
   appendDisposition,
   appendBatchDisposition,
   getDispositions,
   getSessionWithDispositions,
+  getSessionWithDispositionsApplied,
   VALID_ACTIONS
 };
