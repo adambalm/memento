@@ -935,16 +935,50 @@ function renderLaunchpadPage(sessionId, sessionState, lockStatus = {}, reviewMod
         const result = await response.json();
 
         if (result.success) {
-          showToast('Session complete! Lock cleared.', 'success');
+          // Show completion overlay
+          showCompletionScreen();
+
+          // Try to close window (may fail due to browser security)
           setTimeout(() => {
             window.close();
-          }, 1500);
+          }, 2000);
         } else {
           showToast(result.message || 'Failed to clear lock', 'error');
         }
       } catch (error) {
         showToast('Error: ' + error.message, 'error');
       }
+    }
+
+    function showCompletionScreen() {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = \`
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+        animation: fadeIn 0.3s ease;
+      \`;
+      overlay.innerHTML = \`
+        <div style="text-align: center; color: #fff;">
+          <div style="font-size: 4em; margin-bottom: 0.3em;">✨</div>
+          <h1 style="font-size: 2.5em; font-weight: 300; margin-bottom: 0.3em; color: #4ade80;">Session Complete</h1>
+          <p style="font-size: 1.2em; color: #a0a0a0; margin-bottom: 2em;">All items resolved. Lock cleared.</p>
+          <p style="font-size: 1em; color: #666;">You can close this tab now.</p>
+          <div style="margin-top: 2em;">
+            <a href="/history" style="color: #4a9eff; text-decoration: none; margin-right: 2em;">← View History</a>
+            <a href="/tasks" style="color: #4a9eff; text-decoration: none;">Next Task →</a>
+          </div>
+        </div>
+      \`;
+      document.body.appendChild(overlay);
     }
 
     // Development helper: Force clear lock without resolving all items
