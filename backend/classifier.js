@@ -5,6 +5,7 @@
  */
 
 const { runModel, getEngineInfo } = require('./models');
+const { getApprovedRules } = require('./correctionAnalyzer');
 
 const SCHEMA_VERSION = '1.3.0';  // Added dispositions array for Nuclear Option mode
 const DEFAULT_ENGINE = 'ollama-local';
@@ -46,12 +47,33 @@ If a tab clearly relates to one of these projects (matching keywords, topics, or
 }
 
 /**
+ * Build the learned rules block for prompt injection
+ * Converts approved rules into prompt-friendly text
+ */
+function buildLearnedRulesBlock(learnedRules) {
+  if (!learnedRules || learnedRules.length === 0) {
+    return '';
+  }
+
+  const ruleLines = learnedRules.map((r, i) => `- ${r.rule}`).join('\n');
+
+  return `
+LEARNED RULES (from user corrections):
+${ruleLines}
+`;
+}
+
+/**
  * Build the classification prompt for the LLM (Pass 1)
  * Uses minimal output format to force explicit enumeration of ALL tabs
  * Accepts optional context with active projects for smarter classification
+ * @param {Array} tabs - Tab array
+ * @param {Object|null} context - User context with active projects
+ * @param {Array} learnedRules - Approved rules from correction analyzer
  */
-function buildPrompt(tabs, context = null) {
+function buildPrompt(tabs, context = null, learnedRules = []) {
   const { contextBlock, customCategories } = buildContextBlock(context);
+  const learnedRulesBlock = buildLearnedRulesBlock(learnedRules);
 
   const tabSummaries = tabs.map((tab, i) =>
     `${i + 1}. ${tab.title || 'Untitled'} | ${tab.url || 'unknown'}`
@@ -107,7 +129,7 @@ SPECIAL CATEGORY RULES:
   Signals for PROTECTED: URL contains /account/, /dashboard/, /billing/, /pay/, /checkout/, /manage/, /settings/; page shows "logged in as", account numbers, balances, "pay now", order confirmation
   Signals for NOT protected: URL is article/blog/learn/education/products; page is promotional, educational, or informational
 - "Academic (Synthesis)": Use for academic papers, arxiv PDFs, research publications, scholarly articles. These should be consolidated into notes. Signals: arxiv.org, .edu domains, PDF papers, "et al.", DOI links, journal names.
-
+${learnedRulesBlock}
 Your reasoning must be AUDITABLE. A human reviewing your output should understand exactly why each tab was classified the way it was.
 
 VERIFY before responding: Count your assignments. You must have exactly ${tabs.length} entries.`;
@@ -902,14 +924,29 @@ async function classifyWithLLM(tabs, engine = DEFAULT_ENGINE, context = null, de
     }
   }
 
+  // === Load Learned Rules ===
+  let learnedRules = [];
+  try {
+    learnedRules = await getApprovedRules();
+    if (learnedRules.length > 0) {
+      console.error(`[Rules] Injecting ${learnedRules.length} learned rule(s) into prompt`);
+    }
+  } catch (err) {
+    console.warn(`[Rules] Failed to load learned rules: ${err.message}`);
+  }
+
   // === PASS 1: Classification + Triage ===
   console.error(`[Pass 1] Calling LLM via ${engineInfo.engine} (${engineInfo.model})...`);
   const pass1Start = Date.now();
-  const prompt = buildPrompt(tabs, context);
+  const prompt = buildPrompt(tabs, context, learnedRules);
 
   // Capture prompt in trace
   if (debugMode) {
     trace.pass1.prompt = prompt;
+    trace.pass1.learnedRulesCount = learnedRules.length;
+    if (learnedRules.length > 0) {
+      trace.pass1.learnedRules = learnedRules.map(r => ({ domain: r.domain, rule: r.rule }));
+    }
   }
 
   const pass1Response = await runModel(engine, prompt);

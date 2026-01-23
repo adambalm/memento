@@ -2,7 +2,6 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { classifyTabs } = require('./classifier');
-const { renderResultsPage } = require('./renderer');
 const { renderSummaryPage } = require('./renderers/summaryRenderer');
 const { renderMapPage } = require('./renderers/mapRenderer');
 const { renderTabsPage } = require('./renderers/tabsRenderer');
@@ -20,6 +19,10 @@ const { enrichTopTask } = require('./taskEnricher');
 const { getRecentEntries: getRecentTaskEntries, getStats: getTaskLogStats } = require('./taskLog');
 const { executeAction: executeTaskAction, skipTask } = require('./taskActions');
 const { renderTaskPickerPage, renderCompletionPage } = require('./renderers/taskPickerRenderer');
+const { renderWorkbenchPage } = require('./renderers/workbenchRenderer');
+const { renderRulesPage } = require('./renderers/rulesRenderer');
+const { runModel, getEngineInfo } = require('./models');
+const { getAllRules, approveRule, rejectRule, getCorrectionStats } = require('./correctionAnalyzer');
 
 const app = express();
 const PORT = 3000;
@@ -62,8 +65,8 @@ app.post('/classifyBrowserContext', async (req, res) => {
     // Load context: request context > file context > none
     const context = requestContext || loadContext();
 
-    // Call LLM classifier with specified engine, context, and debugMode
-    const classification = await classifyTabs(processedTabs, engine, context, debugMode);
+    // Call LLM classifier with specified engine, context, and debugMode (default: true for trace capture)
+    const classification = await classifyTabs(processedTabs, engine, context, debugMode ?? true);
 
     // Save to memory and get session ID
     const sessionId = await saveSession(classification);
@@ -82,13 +85,10 @@ app.post('/classifyBrowserContext', async (req, res) => {
   }
 });
 
-// GET /results - Render results as HTML page
+// GET /results - Render results as HTML page (legacy route, redirects to session-based)
 app.get('/results', (req, res) => {
-  const data = req.query.data ? JSON.parse(decodeURIComponent(req.query.data)) : null;
-  if (!data) {
-    return res.status(400).send('No data provided');
-  }
-  res.send(renderResultsPage(data));
+  // Redirect to history if no data - this route is deprecated
+  res.redirect('/history');
 });
 
 // GET /results/:sessionId - View saved session results (Summary hub screen)
@@ -181,11 +181,12 @@ app.post('/classifyAndRender', async (req, res) => {
     // Load context: request context > file context > none
     const context = requestContext || loadContext();
 
-    const classification = await classifyTabs(processedTabs, engine, context, debugMode);
+    // debugMode defaults to true for trace capture
+    const classification = await classifyTabs(processedTabs, engine, context, debugMode ?? true);
     const sessionId = await saveSession(classification);
     // Get mirror insight for confrontational reflection
     const mirrorInsight = await getMirrorInsight();
-    res.send(renderResultsPage(classification, sessionId, mirrorInsight));
+    res.send(renderSummaryPage(classification, sessionId, mirrorInsight));
   } catch (error) {
     console.error('Classification error:', error);
     res.status(500).send('<html><body><h1>Error: Classification failed</h1></body></html>');
@@ -476,10 +477,150 @@ app.post('/api/tasks/:taskId/action', async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════════════
+// WORKBENCH ROUTES - Prompt inspection and editing
+// ═══════════════════════════════════════════════════════════════
+
+// GET /workbench/:sessionId - Inspect prompts and responses for a session
+app.get('/workbench/:sessionId', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const session = await readSession(sessionId);
+
+    if (!session) {
+      return res.status(404).send('<html><body><h1>Session not found</h1></body></html>');
+    }
+
+    res.send(renderWorkbenchPage(session, sessionId));
+  } catch (error) {
+    console.error('Workbench error:', error);
+    res.status(500).send('<html><body><h1>Error loading workbench</h1></body></html>');
+  }
+});
+
+// POST /api/workbench/rerun - Re-run a single pass with modified prompt
+app.post('/api/workbench/rerun', async (req, res) => {
+  try {
+    const { sessionId, pass, prompt, engine } = req.body;
+
+    if (!sessionId || !pass || !prompt) {
+      return res.status(400).json({ error: 'sessionId, pass, and prompt required' });
+    }
+
+    // Load original session for context
+    const session = await readSession(sessionId);
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    // Determine engine to use
+    const useEngine = engine || session.meta?.engine || 'claude';
+    const engineInfo = getEngineInfo(useEngine);
+
+    console.log(`[Workbench] Re-running pass ${pass} for session ${sessionId} via ${useEngine}`);
+
+    // Run the model with the modified prompt
+    const response = await runModel(useEngine, prompt);
+
+    res.json({
+      success: true,
+      pass,
+      engine: engineInfo.engine,
+      model: engineInfo.model,
+      rawResponse: response.text,
+      usage: response.usage || null
+    });
+  } catch (error) {
+    console.error('Workbench rerun error:', error);
+    res.status(500).json({ error: error.message || 'Rerun failed' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// RULES ROUTES - Learned classification rules management
+// Closes the feedback loop: corrections → rules → better classification
+// ═══════════════════════════════════════════════════════════════
+
+// GET /rules - Rules management UI
+app.get('/rules', async (req, res) => {
+  try {
+    const rules = await getAllRules();
+    const stats = await getCorrectionStats();
+    res.send(renderRulesPage(rules, stats));
+  } catch (error) {
+    console.error('Rules page error:', error);
+    res.status(500).send('<html><body><h1>Error loading rules</h1><p>' + error.message + '</p></body></html>');
+  }
+});
+
+// GET /api/rules - Get all rules (approved + pending suggestions)
+app.get('/api/rules', async (req, res) => {
+  try {
+    const rules = await getAllRules();
+    const stats = await getCorrectionStats();
+    res.json({ ...rules, stats });
+  } catch (error) {
+    console.error('Rules fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch rules' });
+  }
+});
+
+// POST /api/rules/:ruleId/approve - Approve a pending rule
+app.post('/api/rules/:ruleId/approve', async (req, res) => {
+  try {
+    const { ruleId } = req.params;
+    const ruleData = req.body;
+
+    if (!ruleData || !ruleData.domain || !ruleData.rule) {
+      return res.status(400).json({ success: false, message: 'Rule data required (domain, rule)' });
+    }
+
+    console.error(`[Rules] Approving rule: ${ruleId} for domain ${ruleData.domain}`);
+    await approveRule(ruleId, ruleData);
+
+    res.json({ success: true, message: `Rule approved: ${ruleData.domain}` });
+  } catch (error) {
+    console.error('Rule approval error:', error);
+    res.status(500).json({ success: false, message: 'Failed to approve rule' });
+  }
+});
+
+// POST /api/rules/:ruleId/reject - Reject a pending rule
+app.post('/api/rules/:ruleId/reject', async (req, res) => {
+  try {
+    const { ruleId } = req.params;
+
+    console.error(`[Rules] Rejecting rule: ${ruleId}`);
+    await rejectRule(ruleId);
+
+    res.json({ success: true, message: 'Rule rejected' });
+  } catch (error) {
+    console.error('Rule rejection error:', error);
+    res.status(500).json({ success: false, message: 'Failed to reject rule' });
+  }
+});
+
+// POST /api/rules/:ruleId/unapprove - Remove approval (move back to rejected)
+app.post('/api/rules/:ruleId/unapprove', async (req, res) => {
+  try {
+    const { ruleId } = req.params;
+
+    console.error(`[Rules] Unapproving rule: ${ruleId}`);
+    await rejectRule(ruleId);
+
+    res.json({ success: true, message: 'Rule unapproved' });
+  } catch (error) {
+    console.error('Rule unapproval error:', error);
+    res.status(500).json({ success: false, message: 'Failed to unapprove rule' });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Memento backend running at http://localhost:${PORT}`);
   console.log(`POST /classifyBrowserContext - Classify tabs and return JSON`);
   console.log(`POST /classifyAndRender - Classify tabs and return HTML page`);
   console.log(`GET  /launchpad/:sessionId - Launchpad UI (Nuclear Option mode)`);
   console.log(`GET  /tasks - Task-Driven Attention System (One Thing)`);
+  console.log(`GET  /workbench/:sessionId - Prompt Workbench (inspect/edit traces)`);
+  console.log(`GET  /rules - Learned Rules Management`);
 });

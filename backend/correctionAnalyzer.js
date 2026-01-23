@@ -348,6 +348,235 @@ async function getCorrectionStats() {
   };
 }
 
+// ============================================================
+// PROMPT RULE GENERATION
+// ============================================================
+
+const LEARNED_RULES_PATH = path.join(__dirname, 'prompts', 'learned-rules.json');
+
+/**
+ * Load learned rules from disk
+ * @returns {Object} { rules: Array, version: string }
+ */
+async function loadLearnedRules() {
+  try {
+    const content = await fs.readFile(LEARNED_RULES_PATH, 'utf-8');
+    return JSON.parse(content);
+  } catch (err) {
+    // Return empty if file doesn't exist
+    return { rules: [], version: '1.0.0', lastUpdated: null };
+  }
+}
+
+/**
+ * Save learned rules to disk
+ */
+async function saveLearnedRules(rulesData) {
+  rulesData.lastUpdated = new Date().toISOString();
+  // Ensure prompts directory exists
+  const promptsDir = path.dirname(LEARNED_RULES_PATH);
+  await fs.mkdir(promptsDir, { recursive: true });
+  await fs.writeFile(LEARNED_RULES_PATH, JSON.stringify(rulesData, null, 2));
+  return rulesData;
+}
+
+/**
+ * Generate natural language rule suggestions from correction patterns
+ * Analyzes aggregated corrections and creates rules suitable for prompt injection
+ *
+ * @param {number} minCorrections - Minimum corrections to trigger rule suggestion (default: 2)
+ * @returns {Array<Object>} Array of rule suggestions with source corrections
+ */
+async function generateRuleSuggestions(minCorrections = 2) {
+  const domainStats = await aggregateByDomain();
+  const existingRules = await loadLearnedRules();
+  const existingDomains = new Set(existingRules.rules.map(r => r.domain));
+
+  const suggestions = [];
+
+  for (const [domain, stats] of domainStats) {
+    // Skip if we already have a rule for this domain
+    if (existingDomains.has(domain)) continue;
+
+    // Skip if not enough corrections
+    if (stats.totalCorrections < minCorrections) continue;
+
+    // Analyze the correction pattern
+    const fromCategories = Object.entries(stats.fromCategories)
+      .sort((a, b) => b[1] - a[1]);
+    const toCategories = Object.entries(stats.toCategories)
+      .sort((a, b) => b[1] - a[1]);
+
+    // Only suggest if there's a clear pattern (dominant correction target)
+    if (toCategories.length === 0) continue;
+
+    const topTo = toCategories[0];
+    const topToCategory = topTo[0];
+    const topToCount = topTo[1];
+
+    // Require majority agreement on target category
+    const agreementRatio = topToCount / stats.totalCorrections;
+    if (agreementRatio < 0.6) continue; // Need 60%+ agreement
+
+    // Build the rule text
+    const fromList = fromCategories.map(([cat]) => cat).join(', ');
+    let ruleText = `URLs from ${domain} should be classified as "${topToCategory}"`;
+
+    // Add context about what it was being misclassified as
+    if (fromCategories.length === 1) {
+      ruleText += ` (not "${fromCategories[0][0]}")`;
+    } else if (fromCategories.length > 1) {
+      ruleText += ` (often misclassified as ${fromList})`;
+    }
+
+    // Add any path-based exceptions we can detect
+    const exceptions = detectPathExceptions(stats.corrections);
+    if (exceptions.length > 0) {
+      ruleText += `. Exception: paths containing ${exceptions.join(' or ')} may be other categories.`;
+    }
+
+    suggestions.push({
+      id: `rule-${domain}-${Date.now()}`,
+      domain,
+      rule: ruleText,
+      approved: false,
+      confidence: agreementRatio,
+      stats: {
+        totalCorrections: stats.totalCorrections,
+        fromCategories: Object.fromEntries(fromCategories),
+        toCategories: Object.fromEntries(toCategories),
+        agreementRatio: Math.round(agreementRatio * 100) + '%'
+      },
+      sourceCorrections: stats.corrections.slice(0, 5).map(c => ({
+        url: c.url,
+        title: c.title,
+        from: c.from,
+        to: c.to,
+        at: c.at
+      })),
+      createdAt: new Date().toISOString()
+    });
+  }
+
+  // Sort by confidence * corrections (higher = more reliable)
+  return suggestions.sort((a, b) =>
+    (b.confidence * b.stats.totalCorrections) - (a.confidence * a.stats.totalCorrections)
+  );
+}
+
+/**
+ * Detect path patterns that might be exceptions to a domain rule
+ * E.g., github.com is usually Development, but /sponsors/ might be Shopping
+ */
+function detectPathExceptions(corrections) {
+  const pathPatterns = {};
+
+  for (const c of corrections) {
+    try {
+      const url = new URL(c.url);
+      const pathParts = url.pathname.split('/').filter(p => p.length > 2);
+
+      // Track which path parts appear with which target categories
+      for (const part of pathParts.slice(0, 3)) { // First 3 path segments
+        if (!pathPatterns[part]) {
+          pathPatterns[part] = { targets: {} };
+        }
+        pathPatterns[part].targets[c.to] = (pathPatterns[part].targets[c.to] || 0) + 1;
+      }
+    } catch (err) {}
+  }
+
+  // Find path parts that consistently go to a different category than the majority
+  const exceptions = [];
+  const majorityTo = corrections.reduce((acc, c) => {
+    acc[c.to] = (acc[c.to] || 0) + 1;
+    return acc;
+  }, {});
+  const topCategory = Object.entries(majorityTo).sort((a, b) => b[1] - a[1])[0]?.[0];
+
+  for (const [pathPart, data] of Object.entries(pathPatterns)) {
+    const targetCats = Object.entries(data.targets);
+    if (targetCats.length > 0) {
+      const topTargetForPath = targetCats.sort((a, b) => b[1] - a[1])[0];
+      if (topTargetForPath[0] !== topCategory && topTargetForPath[1] >= 2) {
+        exceptions.push(`/${pathPart}/`);
+      }
+    }
+  }
+
+  return exceptions.slice(0, 3); // Max 3 exceptions
+}
+
+/**
+ * Get all rules (approved + pending suggestions)
+ */
+async function getAllRules() {
+  const existingRules = await loadLearnedRules();
+  const suggestions = await generateRuleSuggestions();
+
+  return {
+    approved: existingRules.rules.filter(r => r.approved),
+    pending: suggestions,
+    version: existingRules.version
+  };
+}
+
+/**
+ * Approve a rule suggestion (adds to learned rules)
+ * @param {string} ruleId - The rule ID to approve
+ * @param {Object} ruleData - The rule data (domain, rule text, etc.)
+ */
+async function approveRule(ruleId, ruleData) {
+  const rulesData = await loadLearnedRules();
+
+  // Check if already exists
+  const existingIndex = rulesData.rules.findIndex(r => r.id === ruleId);
+
+  const approvedRule = {
+    ...ruleData,
+    id: ruleId,
+    approved: true,
+    approvedAt: new Date().toISOString()
+  };
+
+  if (existingIndex >= 0) {
+    rulesData.rules[existingIndex] = approvedRule;
+  } else {
+    rulesData.rules.push(approvedRule);
+  }
+
+  return saveLearnedRules(rulesData);
+}
+
+/**
+ * Reject/remove a rule
+ * @param {string} ruleId - The rule ID to reject
+ */
+async function rejectRule(ruleId) {
+  const rulesData = await loadLearnedRules();
+
+  // Add to rejected list (so we don't re-suggest it)
+  if (!rulesData.rejected) rulesData.rejected = [];
+  rulesData.rejected.push({
+    id: ruleId,
+    rejectedAt: new Date().toISOString()
+  });
+
+  // Remove from approved rules if present
+  rulesData.rules = rulesData.rules.filter(r => r.id !== ruleId);
+
+  return saveLearnedRules(rulesData);
+}
+
+/**
+ * Get only approved rules (for prompt injection)
+ * @returns {Array<Object>} Array of approved rules
+ */
+async function getApprovedRules() {
+  const rulesData = await loadLearnedRules();
+  return rulesData.rules.filter(r => r.approved);
+}
+
 module.exports = {
   loadExtractors,
   saveExtractors,
@@ -358,5 +587,13 @@ module.exports = {
   addExtractor,
   getExtractorForDomain,
   getCorrectionStats,
-  DEFAULT_EXTRACTORS
+  DEFAULT_EXTRACTORS,
+  // New rule generation exports
+  loadLearnedRules,
+  saveLearnedRules,
+  generateRuleSuggestions,
+  getAllRules,
+  approveRule,
+  rejectRule,
+  getApprovedRules
 };
