@@ -2,6 +2,17 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> ## Session Startup — Read Basic Memory Context
+>
+> Before doing any work in this repository:
+>
+> 1. **Read BOOTSTRAP:** `build_context` with `memory://BOOTSTRAP` for governing protocols
+> 2. **Check git sync:** Verify Basic Memory is synced (suphouse ↔ GitHub ↔ adambalm)
+> 3. **Load project handoff:** `build_context` with `memory://continuity/cross-instance/memento-context`
+> 4. **Check project board:** https://github.com/users/adambalm/projects/1
+>
+> If last sync was >12 hours ago, ask: "Would you like me to summarize where we left off?"
+
 ## Commands
 
 ```bash
