@@ -113,3 +113,113 @@ None currently tracked.
 **MCP Protocol Corruption (fixed 2025-01-01)**
 - MCP server was logging to stdout, corrupting JSON-RPC protocol
 - Fixed by routing all logs to stderr (`console.error`)
+
+## Project Structure
+
+```
+memento-mvp/
+├── backend/                    # Express server
+│   ├── server.js              # Main HTTP endpoints
+│   ├── classifier.js          # LLM classification orchestration
+│   ├── models/                # LLM drivers (Ollama, stubs for OpenAI/Anthropic)
+│   ├── renderers/             # HTML page generators
+│   │   ├── layout.js          # Shared layout utilities
+│   │   ├── summaryRenderer.js # Results page
+│   │   ├── launchpad.js       # Launchpad forced-completion UI
+│   │   ├── taskPickerRenderer.js # Task flow UI
+│   │   ├── dashboardRenderer.js  # Main dashboard (/)
+│   │   ├── preferencesRenderer.js # Learned preferences (/preferences)
+│   │   ├── devDashboardRenderer.js # Dev tracker (/dev)
+│   │   └── workbenchRenderer.js   # Prompt experimentation
+│   ├── taskGenerator.js       # Longitudinal attention tasks
+│   ├── taskActions.js         # Task action handlers
+│   ├── correctionAnalyzer.js  # Rule/preference learning from corrections
+│   ├── lockManager.js         # Session lock for forced-completion
+│   ├── dispositions.js        # Append-only action tracking
+│   └── mcp-server.js          # MCP server for Claude Desktop
+├── extension/                  # Chrome extension (Manifest V3)
+│   ├── manifest.json
+│   ├── popup.html/js          # Extension popup UI
+│   └── background.js          # Service worker
+├── tests/                      # Test files
+│   ├── e2e/                   # Playwright end-to-end tests
+│   ├── mcp/                   # MCP server tests
+│   └── screenshots/           # Test screenshots
+├── docs/                       # Documentation
+├── memory/                     # Session storage
+│   └── sessions/              # JSON session files
+├── dialogues/                  # Saved conversations/logs
+├── CLAUDE.md                   # This file (project instructions)
+├── README.md                   # User-facing documentation
+└── TODO.md                     # Task tracking
+```
+
+### Related Projects (Sibling Directories)
+
+- `../forensic-audio-skill-forge/` - Separate Skill Forge project for audio forensics (moved from memento-mvp on 2026-01-23)
+
+## Cross-Project Context
+
+This project is part of a three-project development sandbox:
+
+| Project | Path | Purpose |
+|---------|------|---------|
+| portfolio | `C:/Users/Guest1/dev-sandbox/portfolio/` | Epistemic showcase, React 19 + Vite |
+| **memento-mvp** (this) | `C:/Users/Guest1/dev-sandbox/memento-mvp/` | Browser session capture, Node.js + Chrome Extension |
+| sca-website | `C:/Users/Guest1/dev-sandbox/sca-website/` | School website, Astro + Sanity CMS monorepo |
+
+**Basic Memory Locations:**
+- Extended context: `memory://projects/memento/`
+- Session handoffs: `memory://continuity/cross-instance/memento-context.md`
+- MCP architecture docs: `memory://decisions/Memento MCP Architecture Decision.md`
+
+**Handoff Protocol:** Use `/sync-context save` before ending sessions; other instances use `/sync-context load memento` to resume.
+
+## Current Development State (2026-01-23)
+
+### Recently Completed (Product Coherence Sprint)
+
+**Sprint 0-2 DONE:** Feedback loops and navigation hub
+
+**Cleanup (2026-01-23):**
+- Removed 23 `tmpclaude-*` temp files from root
+- Moved scattered test files to `tests/e2e/`
+- Moved `test-screenshots/` to `tests/screenshots/`
+- Moved `forensic-audio-skill-forge/` to sibling directory (separate project)
+
+1. **Preference visibility** - Results page now shows "Applied X preferences" when learned preferences influence classification
+2. **Rules → Preferences rename** - `/rules` redirects to `/preferences`, all UI copy updated to friendlier language
+3. **Task action feedback** - Toast messages show specific feedback like "Blocked example.com"
+4. **Preference tracking** - Application counts tracked and displayed ("Used 12 times")
+5. **Central dashboard** - New `/` route shows lock status, preferences, tasks, recent sessions
+6. **Dev dashboard** - `/dev` route for sprint tracking (but see "Next Steps" - it's static)
+
+### New Routes Added
+- `GET /` - Main dashboard (navigation hub)
+- `GET /dev` - Development sprint tracker
+- `GET /preferences` - Renamed from /rules
+- `GET /rules` - Redirects to /preferences
+
+### New Files Created
+- `backend/renderers/dashboardRenderer.js`
+- `backend/renderers/preferencesRenderer.js`
+- `backend/renderers/devDashboardRenderer.js`
+
+### Next Steps (PRIORITY)
+
+**Problem:** The `/dev` dashboard is static - it lies. Sprint status is hardcoded, not derived from code.
+
+**What's needed:**
+1. **Auto-generated route inventory** - Scan server.js, list all routes with their state (working/partial/stub)
+2. **Screen inventory** - Every page, its purpose, clickable test links
+3. **Living documentation** - Generated from code, always accurate
+
+**Methodology to adopt:** Consider Architecture Decision Records (ADRs), screen inventories, and living documentation patterns. The goal is tooling that tells truth about the codebase, not static docs that rot.
+
+### All Routes (for reference)
+To get current routes: `grep -E "app\.(get|post)" backend/server.js`
+
+### Remaining Sprints (from original plan)
+- Sprint 3: Goal tracking (goals influence task generation)
+- Sprint 4: Tab annotation UI
+- Sprint 5: Workbench save flow
