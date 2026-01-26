@@ -175,7 +175,9 @@ This project is part of a three-project development sandbox:
 - Session handoffs: `memory://continuity/cross-instance/memento-context.md`
 - MCP architecture docs: `memory://decisions/Memento MCP Architecture Decision.md`
 
-**Project Tracking:** [Dev Sandbox Board](https://github.com/users/adambalm/projects/1) - GitHub Project spanning all three repos
+**Project Tracking:**
+- [Dev Sandbox Board](https://github.com/users/adambalm/projects/1) - GitHub Project spanning all three repos
+- Vibe Kanban: `npx vibe-kanban` - Visual task orchestration (run in separate terminal)
 
 **Handoff Protocol:** Use `/sync-context save` before ending sessions; other instances use `/sync-context load memento` to resume.
 
