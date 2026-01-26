@@ -21,14 +21,51 @@ const { executeAction: executeTaskAction, skipTask } = require('./taskActions');
 const { renderTaskPickerPage, renderCompletionPage } = require('./renderers/taskPickerRenderer');
 const { renderWorkbenchPage } = require('./renderers/workbenchRenderer');
 const { renderRulesPage } = require('./renderers/rulesRenderer');
+const { renderPreferencesPage } = require('./renderers/preferencesRenderer');
+const { renderDevDashboardPage } = require('./renderers/devDashboardRenderer');
+const { renderDashboardPage } = require('./renderers/dashboardRenderer');
 const { runModel, getEngineInfo } = require('./models');
 const { getAllRules, approveRule, rejectRule, getCorrectionStats } = require('./correctionAnalyzer');
+const { createEffort, getEfforts, completeEffort, deferEffort } = require('./effortManager');
 
 const app = express();
 const PORT = 3000;
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
+
+// GET /dev - Development dashboard (sprint tracking, feature inventory, route inventory)
+app.get('/dev', async (req, res) => {
+  try {
+    res.send(await renderDevDashboardPage());
+  } catch (error) {
+    console.error('Dev dashboard error:', error);
+    res.status(500).send('<html><body><h1>Error loading dev dashboard</h1><p>' + error.message + '</p></body></html>');
+  }
+});
+
+// GET / - Main dashboard (navigation hub)
+app.get('/', async (req, res) => {
+  try {
+    // Gather all dashboard data in parallel
+    const [lockStatus, preferences, taskStats, recentSessions] = await Promise.all([
+      getLockStatus(),
+      getAllRules(),
+      getAttentionStats(),
+      listSessions().then(sessions => sessions.slice(0, 5))
+    ]);
+
+    res.send(renderDashboardPage({
+      lockStatus,
+      preferences,
+      taskStats,
+      recentSessions
+    }));
+  } catch (error) {
+    console.error('Dashboard error:', error);
+    res.status(500).send('<html><body><h1>Error loading dashboard</h1><p>' + error.message + '</p></body></html>');
+  }
+});
 
 // GET /history - Browse all sessions
 app.get('/history', async (req, res) => {
@@ -202,16 +239,21 @@ app.post('/classifyAndRender', async (req, res) => {
 app.get('/launchpad/:sessionId', async (req, res) => {
   try {
     const { sessionId } = req.params;
-    const sessionState = await getSessionWithDispositions(sessionId);
+    const [sessionState, lockStatus, preferences, efforts] = await Promise.all([
+      getSessionWithDispositions(sessionId),
+      getLockStatus(),
+      getAllRules(),
+      getEfforts(sessionId)
+    ]);
 
     if (!sessionState) {
       return res.status(404).send('<html><body><h1>Session not found</h1></body></html>');
     }
 
-    // Get lock status for Resume Card
-    const lockStatus = await getLockStatus();
+    // Count active preferences for display
+    const preferenceCount = preferences?.approved?.length || 0;
 
-    res.send(renderLaunchpadPage(sessionId, sessionState, lockStatus));
+    res.send(renderLaunchpadPage(sessionId, sessionState, lockStatus, false, preferenceCount, efforts));
   } catch (error) {
     console.error('Launchpad error:', error);
     res.status(500).send('<html><body><h1>Error loading Launchpad</h1></body></html>');
@@ -371,6 +413,65 @@ app.post('/api/lock/force-clear', async (req, res) => {
   } catch (error) {
     console.error('Force clear lock error:', error);
     res.status(500).json({ success: false, message: 'Failed to force clear lock' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// EFFORT ROUTES - User-created tab groupings
+// Allows grouping scattered tabs into named efforts
+// ═══════════════════════════════════════════════════════════════
+
+// POST /api/launchpad/:sessionId/effort - Create a new effort
+app.post('/api/launchpad/:sessionId/effort', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { name, items } = req.body;
+
+    if (!name || !items) {
+      return res.status(400).json({ success: false, message: 'name and items required' });
+    }
+
+    const result = await createEffort(sessionId, name, items);
+    res.json(result);
+  } catch (error) {
+    console.error('Create effort error:', error);
+    res.status(500).json({ success: false, message: 'Failed to create effort' });
+  }
+});
+
+// GET /api/launchpad/:sessionId/efforts - Get all efforts for a session
+app.get('/api/launchpad/:sessionId/efforts', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const efforts = await getEfforts(sessionId);
+    res.json({ success: true, efforts });
+  } catch (error) {
+    console.error('Get efforts error:', error);
+    res.status(500).json({ success: false, message: 'Failed to get efforts' });
+  }
+});
+
+// POST /api/launchpad/:sessionId/effort/:effortId/complete - Complete an effort
+app.post('/api/launchpad/:sessionId/effort/:effortId/complete', async (req, res) => {
+  try {
+    const { sessionId, effortId } = req.params;
+    const result = await completeEffort(sessionId, effortId);
+    res.json(result);
+  } catch (error) {
+    console.error('Complete effort error:', error);
+    res.status(500).json({ success: false, message: 'Failed to complete effort' });
+  }
+});
+
+// POST /api/launchpad/:sessionId/effort/:effortId/defer - Defer an effort
+app.post('/api/launchpad/:sessionId/effort/:effortId/defer', async (req, res) => {
+  try {
+    const { sessionId, effortId } = req.params;
+    const result = await deferEffort(sessionId, effortId);
+    res.json(result);
+  } catch (error) {
+    console.error('Defer effort error:', error);
+    res.status(500).json({ success: false, message: 'Failed to defer effort' });
   }
 });
 
@@ -537,23 +638,40 @@ app.post('/api/workbench/rerun', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════
-// RULES ROUTES - Learned classification rules management
-// Closes the feedback loop: corrections → rules → better classification
+// PREFERENCES ROUTES - Learned classification preferences
+// Closes the feedback loop: corrections → preferences → better classification
 // ═══════════════════════════════════════════════════════════════
 
-// GET /rules - Rules management UI
-app.get('/rules', async (req, res) => {
+// GET /preferences - Preferences management UI
+app.get('/preferences', async (req, res) => {
   try {
-    const rules = await getAllRules();
+    const preferences = await getAllRules();
     const stats = await getCorrectionStats();
-    res.send(renderRulesPage(rules, stats));
+    res.send(renderPreferencesPage(preferences, stats));
   } catch (error) {
-    console.error('Rules page error:', error);
-    res.status(500).send('<html><body><h1>Error loading rules</h1><p>' + error.message + '</p></body></html>');
+    console.error('Preferences page error:', error);
+    res.status(500).send('<html><body><h1>Error loading preferences</h1><p>' + error.message + '</p></body></html>');
   }
 });
 
-// GET /api/rules - Get all rules (approved + pending suggestions)
+// GET /rules - Redirect to /preferences (backwards compatibility)
+app.get('/rules', (req, res) => {
+  res.redirect('/preferences');
+});
+
+// GET /api/preferences - Get all preferences (approved + pending suggestions)
+app.get('/api/preferences', async (req, res) => {
+  try {
+    const preferences = await getAllRules();
+    const stats = await getCorrectionStats();
+    res.json({ ...preferences, stats });
+  } catch (error) {
+    console.error('Preferences fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch preferences' });
+  }
+});
+
+// GET /api/rules - Alias for /api/preferences (backwards compatibility)
 app.get('/api/rules', async (req, res) => {
   try {
     const rules = await getAllRules();
@@ -565,7 +683,27 @@ app.get('/api/rules', async (req, res) => {
   }
 });
 
-// POST /api/rules/:ruleId/approve - Approve a pending rule
+// POST /api/preferences/:prefId/approve - Confirm a pending preference
+app.post('/api/preferences/:prefId/approve', async (req, res) => {
+  try {
+    const { prefId } = req.params;
+    const prefData = req.body;
+
+    if (!prefData || !prefData.domain || !prefData.rule) {
+      return res.status(400).json({ success: false, message: 'Preference data required (domain, rule)' });
+    }
+
+    console.error(`[Preferences] Confirming preference: ${prefId} for domain ${prefData.domain}`);
+    await approveRule(prefId, prefData);
+
+    res.json({ success: true, message: `Preference confirmed: ${prefData.domain}` });
+  } catch (error) {
+    console.error('Preference confirmation error:', error);
+    res.status(500).json({ success: false, message: 'Failed to confirm preference' });
+  }
+});
+
+// POST /api/rules/:ruleId/approve - Alias for backwards compatibility
 app.post('/api/rules/:ruleId/approve', async (req, res) => {
   try {
     const { ruleId } = req.params;
@@ -575,7 +713,7 @@ app.post('/api/rules/:ruleId/approve', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Rule data required (domain, rule)' });
     }
 
-    console.error(`[Rules] Approving rule: ${ruleId} for domain ${ruleData.domain}`);
+    console.error(`[Preferences] Confirming preference: ${ruleId} for domain ${ruleData.domain}`);
     await approveRule(ruleId, ruleData);
 
     res.json({ success: true, message: `Rule approved: ${ruleData.domain}` });
@@ -585,12 +723,27 @@ app.post('/api/rules/:ruleId/approve', async (req, res) => {
   }
 });
 
-// POST /api/rules/:ruleId/reject - Reject a pending rule
+// POST /api/preferences/:prefId/reject - Dismiss a pending preference
+app.post('/api/preferences/:prefId/reject', async (req, res) => {
+  try {
+    const { prefId } = req.params;
+
+    console.error(`[Preferences] Dismissing preference: ${prefId}`);
+    await rejectRule(prefId);
+
+    res.json({ success: true, message: 'Preference dismissed' });
+  } catch (error) {
+    console.error('Preference dismissal error:', error);
+    res.status(500).json({ success: false, message: 'Failed to dismiss preference' });
+  }
+});
+
+// POST /api/rules/:ruleId/reject - Alias for backwards compatibility
 app.post('/api/rules/:ruleId/reject', async (req, res) => {
   try {
     const { ruleId } = req.params;
 
-    console.error(`[Rules] Rejecting rule: ${ruleId}`);
+    console.error(`[Preferences] Dismissing preference: ${ruleId}`);
     await rejectRule(ruleId);
 
     res.json({ success: true, message: 'Rule rejected' });
@@ -600,12 +753,27 @@ app.post('/api/rules/:ruleId/reject', async (req, res) => {
   }
 });
 
-// POST /api/rules/:ruleId/unapprove - Remove approval (move back to rejected)
+// POST /api/preferences/:prefId/unapprove - Remove a confirmed preference
+app.post('/api/preferences/:prefId/unapprove', async (req, res) => {
+  try {
+    const { prefId } = req.params;
+
+    console.error(`[Preferences] Removing preference: ${prefId}`);
+    await rejectRule(prefId);
+
+    res.json({ success: true, message: 'Preference removed' });
+  } catch (error) {
+    console.error('Preference removal error:', error);
+    res.status(500).json({ success: false, message: 'Failed to remove preference' });
+  }
+});
+
+// POST /api/rules/:ruleId/unapprove - Alias for backwards compatibility
 app.post('/api/rules/:ruleId/unapprove', async (req, res) => {
   try {
     const { ruleId } = req.params;
 
-    console.error(`[Rules] Unapproving rule: ${ruleId}`);
+    console.error(`[Preferences] Removing preference: ${ruleId}`);
     await rejectRule(ruleId);
 
     res.json({ success: true, message: 'Rule unapproved' });
@@ -622,5 +790,5 @@ app.listen(PORT, () => {
   console.log(`GET  /launchpad/:sessionId - Launchpad UI (Nuclear Option mode)`);
   console.log(`GET  /tasks - Task-Driven Attention System (One Thing)`);
   console.log(`GET  /workbench/:sessionId - Prompt Workbench (inspect/edit traces)`);
-  console.log(`GET  /rules - Learned Rules Management`);
+  console.log(`GET  /preferences - Learned Preferences Management`);
 });
