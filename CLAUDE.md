@@ -36,6 +36,7 @@ Memento is a browser session capture and classification system with two main com
 - `launchpad.js` - Renders Launchpad UI for forced-completion workflow
 - `lockManager.js` - Session lock at `~/.memento/lock.json`; blocks new Launchpad captures until resolved
 - `dispositions.js` - Append-only action tracking (trash, complete, promote, regroup, reprioritize)
+- `effortManager.js` - User-created efforts (grouped tabs representing work focus)
 
 **Supporting files:**
 - `contextLoader.js` - Loads user context from `memento-context.json`
@@ -134,6 +135,7 @@ memento-mvp/
 │   ├── taskGenerator.js       # Longitudinal attention tasks
 │   ├── taskActions.js         # Task action handlers
 │   ├── correctionAnalyzer.js  # Rule/preference learning from corrections
+│   ├── effortManager.js       # User-created effort groupings
 │   ├── lockManager.js         # Session lock for forced-completion
 │   ├── dispositions.js        # Append-only action tracking
 │   └── mcp-server.js          # MCP server for Claude Desktop
@@ -177,46 +179,55 @@ This project is part of a three-project development sandbox:
 
 **Handoff Protocol:** Use `/sync-context save` before ending sessions; other instances use `/sync-context load memento` to resume.
 
-## Current Development State (2026-01-23)
+## Current Development State (2026-01-26)
 
-### Recently Completed (Product Coherence Sprint)
+### Recently Completed
 
-**Sprint 0-2 DONE:** Feedback loops and navigation hub
+**Feedback Loop Implementation (2026-01-26):**
+The core learning loop is now closed - users can correct AI misclassifications and the system learns.
 
-**Cleanup (2026-01-23):**
-- Removed 23 `tmpclaude-*` temp files from root
-- Moved scattered test files to `tests/e2e/`
-- Moved `test-screenshots/` to `tests/screenshots/`
-- Moved `forensic-audio-skill-forge/` to sibling directory (separate project)
+1. **Regroup UI** - "Move to..." dropdown on each Launchpad item lets users move tabs between categories
+2. **Bulk move** - Batch bar supports moving multiple selected items at once
+3. **Effort grouping** - Users can group related tabs into named efforts (e.g., "Google Flow Debugging")
+4. **Effort actions** - Mark Done/Defer actions apply to all tabs in an effort at once
+5. **Learning feedback** - Toast shows "I'll remember [domain] → [category]" when corrections happen
 
-1. **Preference visibility** - Results page now shows "Applied X preferences" when learned preferences influence classification
-2. **Rules → Preferences rename** - `/rules` redirects to `/preferences`, all UI copy updated to friendlier language
-3. **Task action feedback** - Toast messages show specific feedback like "Blocked example.com"
-4. **Preference tracking** - Application counts tracked and displayed ("Used 12 times")
-5. **Central dashboard** - New `/` route shows lock status, preferences, tasks, recent sessions
-6. **Dev dashboard** - `/dev` route for sprint tracking (but see "Next Steps" - it's static)
+**How the feedback loop works:**
+```
+User moves tab → regroup disposition recorded → correctionAnalyzer detects patterns
+    → preference suggestions generated → user approves on /preferences
+    → future classifications use approved preferences
+```
+
+**Product Coherence Sprint (2026-01-23):**
+- Preference visibility - Results page shows "Applied X preferences"
+- Rules → Preferences rename - friendlier language throughout
+- Task action feedback - Toast messages for actions
+- Central dashboard at `/` - navigation hub
+- Dev dashboard at `/dev` - sprint tracking
 
 ### New Routes Added
 - `GET /` - Main dashboard (navigation hub)
 - `GET /dev` - Development sprint tracker
-- `GET /preferences` - Renamed from /rules
+- `GET /preferences` - Learned preferences management
 - `GET /rules` - Redirects to /preferences
+- `POST /api/launchpad/:sessionId/effort` - Create effort
+- `GET /api/launchpad/:sessionId/efforts` - List efforts
+- `POST /api/launchpad/:sessionId/effort/:effortId/complete` - Complete effort
+- `POST /api/launchpad/:sessionId/effort/:effortId/defer` - Defer effort
 
 ### New Files Created
+- `backend/effortManager.js` - Effort CRUD operations
 - `backend/renderers/dashboardRenderer.js`
 - `backend/renderers/preferencesRenderer.js`
 - `backend/renderers/devDashboardRenderer.js`
 
-### Next Steps (PRIORITY)
+### Next Steps
 
-**Problem:** The `/dev` dashboard is static - it lies. Sprint status is hardcoded, not derived from code.
-
-**What's needed:**
-1. **Auto-generated route inventory** - Scan server.js, list all routes with their state (working/partial/stub)
-2. **Screen inventory** - Every page, its purpose, clickable test links
-3. **Living documentation** - Generated from code, always accurate
-
-**Methodology to adopt:** Consider Architecture Decision Records (ADRs), screen inventories, and living documentation patterns. The goal is tooling that tells truth about the codebase, not static docs that rot.
+**Living documentation:** The `/dev` dashboard is static. Consider:
+1. Auto-generated route inventory from server.js
+2. Screen inventory with clickable test links
+3. ADRs for architectural decisions
 
 ### All Routes (for reference)
 To get current routes: `grep -E "app\.(get|post)" backend/server.js`
